@@ -90,8 +90,9 @@ textarea.block{width:100%;min-height:90px;border:1px solid var(--line);border-ra
 .prop input,.prop select{border:1px solid transparent;background:none;padding:3px 6px;border-radius:4px;width:100%}
 .prop input:hover,.prop select:hover,.prop input:focus,.prop select:focus{background:var(--hover);outline:none}
 .lbl{color:var(--muted);margin:18px 0 4px;font-weight:500}
+.prop>*{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 6px}
-.chip{background:var(--gray);border-radius:3px;padding:0 6px;font-size:12.5px;display:flex;gap:4px;align-items:center}
+.chip{overflow-wrap:anywhere;background:var(--gray);border-radius:3px;padding:0 6px;font-size:12.5px;display:flex;gap:4px;align-items:center}
 .chip button{border:0;background:none;cursor:pointer;color:var(--muted);padding:0}
 .hint{font-size:12px;color:var(--muted)}
 @media (max-width:760px){
@@ -123,7 +124,9 @@ const GCAL_URL = 'https://calendar.google.com/calendar/u/0/r';
 /* Colours for select options, Notion-style */
 const COLORS = {Planned:'blue',Running:'yellow',Done:'green',Cancelled:'gray','Done with deviations':'orange',
   Growing:'green',Ready:'blue',Frozen:'purple',Discarded:'gray',
-  OK:'green',Low:'yellow',Out:'red','Make new':'orange'};
+  OK:'green',Low:'yellow',Out:'red','Make new':'orange',
+  'Cell culture':'green',Microfabrication:'gray',Microfluidics:'blue',Differentiation:'purple',Staining:'pink','Live imaging':'yellow','Flow cytometry':'orange','Molecular biology':'brown',Treatment:'red',
+  'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow'};
 
 /* Each "database" and its properties. t = type: text, date, number, select, long, rel (one link), rels (many links) */
 const SCHEMA = {
@@ -159,9 +162,9 @@ const SCHEMA = {
     {k:'count',t:'text',l:'Cell count',ph:'e.g. 2.1e6 cells/ml'},
     {k:'vessel',t:'text',l:'Into vessel'},
     {k:'notes',t:'long',l:'Notes'}]},
-  protocols:{label:'Protocols',icon:'📘',one:'protocol',fields:[
+  protocols:{label:'Protocols',icon:'📘',one:'protocol',tabsBy:'category',cols:['title','category','duration','reagents'],fields:[
     {k:'title',t:'text',l:'Name'},
-    {k:'category',t:'select',l:'Category',o:['Staining','Transfection','Treatment','Fixation','Live imaging','Other']},
+    {k:'category',t:'select',l:'Category',o:['Cell culture','Microfabrication','Microfluidics','Differentiation','Staining','Live imaging','Treatment','Flow cytometry','Molecular biology','Transfection','Fixation','Other']},
     {k:'duration',t:'text',l:'Duration'},
     {k:'reagents',t:'rels',l:'Reagents needed',c:'reagents'},
     {k:'controls',t:'long',l:'Standard controls'},
@@ -291,7 +294,7 @@ function cell(f,r){
   if(f.t==='select')return tag(v);
   if(f.t==='date')return esc(nice(v));
   if(f.t==='rel')return link(f.c,v);
-  if(f.t==='rels')return (v||[]).map(id=>link(f.c,id)).join('');
+  if(f.t==='rels'){const a=v||[];return a.slice(0,3).map(id=>link(f.c,id)).join('')+(a.length>3?`<span class="hint">+${a.length-3} more</span>`:'')}
   return esc(v);
 }
 function tablePage(c){
@@ -322,7 +325,7 @@ function openPeek(c,id){
         <select data-link="${f.k}" style="width:auto"><option value="">+ add</option>${DB[f.c].filter(o=>!cur.includes(o.id)).map(o=>`<option value="${o.id}">${esc(o.title||'Untitled')}</option>`).join('')}</select></div>`}
     else input=`<input data-f="${f.k}" type="${f.t==='date'?'date':f.t==='number'?'number':'text'}" value="${esc(r[f.k])}" placeholder="${esc(f.ph||'Empty')}">`;
     return `<div class="prop"><label>${esc(f.l)}</label>${input}</div>`}).join('');
-  const longs=s.fields.filter(f=>f.t==='long').map(f=>`<div class="lbl">${esc(f.l)}</div><textarea class="block" data-f="${f.k}" style="${f.tall?'min-height:220px':''}" placeholder="${esc(f.ph||'')}">${esc(r[f.k])}</textarea>`).join('');
+  const longs=s.fields.filter(f=>f.t==='long').map(f=>`<div class="lbl">${esc(f.l)}</div><textarea class="block" data-f="${f.k}" style="${f.tall?'min-height:420px':''}" placeholder="${esc(f.ph||'')}">${esc(r[f.k])}</textarea>`).join('');
   let extra='';
   if(c==='experiments'){const p=byId('protocols',r.protocol);
     if(p){const rs=(p.reagents||[]).map(id=>byId('reagents',id)).filter(Boolean);
@@ -378,7 +381,17 @@ function exportData(){
   const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wellplanned-backup-'+iso(new Date())+'.json';a.click();
 }
-$('#importfile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!d.experiments)throw 0;DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page"><div class="callout warn">That file is not a WellPlanned backup.</div></div>')}})};
+/* add entries from an import pack; entries whose name already exists are kept as they are */
+function mergeImport(d){
+  const map={};let added=0,skipped=0;
+  for(const c of Object.keys(SCHEMA)){(d[c]||[]).forEach(r=>{const ex=DB[c].find(x=>(x.title||'').trim().toLowerCase()===(r.title||'').trim().toLowerCase());
+    if(ex){map[r.id]=ex.id;skipped++}else{map[r.id]=r.id;DB[c].push(r);added++}})}
+  for(const c of Object.keys(SCHEMA))for(const f of SCHEMA[c].fields){if(f.t!=='rel'&&f.t!=='rels')continue;
+    DB[c].forEach(r=>{if(f.t==='rel'&&map[r[f.k]])r[f.k]=map[r[f.k]];if(f.t==='rels'&&Array.isArray(r[f.k]))r[f.k]=[...new Set(r[f.k].map(x=>map[x]||x))]})}
+  save();closePeek();render();
+  $('#main').insertAdjacentHTML('afterbegin',`<div class="page" style="padding-bottom:0"><div class="callout"><span>✅</span><div>Imported ${added} new entries${skipped?`, skipped ${skipped} that already existed`:''}.</div></div></div>`);
+}
+$('#importfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(d.wellplannedImport==='merge'){mergeImport(d);return}if(!d.experiments)throw 0;DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page"><div class="callout warn">That file is not a WellPlanned backup.</div></div>')}})};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePeek()});
 
 render();
