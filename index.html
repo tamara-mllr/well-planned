@@ -126,7 +126,8 @@ const COLORS = {Planned:'blue',Running:'yellow',Done:'green',Cancelled:'gray','D
   Growing:'green',Ready:'blue',Frozen:'purple',Discarded:'gray',
   OK:'green',Low:'yellow',Out:'red','Make new':'orange',
   'Cell culture':'green',Microfabrication:'gray',Microfluidics:'blue',Differentiation:'purple',Staining:'pink','Live imaging':'yellow','Flow cytometry':'orange','Molecular biology':'brown',Treatment:'red',
-  'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow'};
+  'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow',
+  Open:'blue','In progress':'yellow',Waiting:'purple',High:'red',Medium:'orange','Low prio':'gray',Email:'blue',Slack:'purple',Manual:'gray'};
 
 /* Each "database" and its properties. t = type: text, date, number, select, long, rel (one link), rels (many links) */
 const SCHEMA = {
@@ -169,6 +170,15 @@ const SCHEMA = {
     {k:'reagents',t:'rels',l:'Reagents needed',c:'reagents'},
     {k:'controls',t:'long',l:'Standard controls'},
     {k:'steps',t:'long',l:'Steps',ph:'1. ...\n2. ...',tall:true}]},
+  todos:{label:'To-dos',icon:'✅',one:'to-do',tabsBy:'status',cols:['title','status','priority','due','source','from'],fields:[
+    {k:'title',t:'text',l:'To-do'},
+    {k:'status',t:'select',l:'Status',o:['Open','In progress','Waiting','Done']},
+    {k:'priority',t:'select',l:'Priority',o:['High','Medium','Low prio']},
+    {k:'due',t:'date',l:'Due'},
+    {k:'source',t:'select',l:'Source',o:['Email','Slack','Manual']},
+    {k:'from',t:'text',l:'From',ph:'Who asked?'},
+    {k:'link',t:'text',l:'Link to message',ph:'Gmail / Slack link'},
+    {k:'notes',t:'long',l:'Notes'}]},
   reagents:{label:'Reagents & stocks',icon:'🧴',one:'reagent',tabsBy:'type',cols:['title','type','status','conc','dilution','location','expires'],fields:[
     {k:'title',t:'text',l:'Reagent'},
     {k:'type',t:'select',l:'Type',o:['Primary antibody','Secondary antibody','Dye / stain','Chemical / buffer','Medium / supplement','Drug / treatment','Plasmid / virus','Kit','Consumable']},
@@ -272,6 +282,7 @@ function weekPage(){
   <div class="week">${days}</div>
 
   <h2>🧹 Housekeeping</h2>
+  ${todoBox()}
   <div class="callout"><span>🧫</span><div style="flex:1;min-width:0"><b>Cells in culture</b>${culture.length?`<div class="tblwrap"><table style="margin-top:6px"><thead><tr><th>Cell line</th><th>Status</th><th>Markers</th><th>Passage</th><th>Last split</th><th>Split ratio</th><th>Days since split</th></tr></thead><tbody>${culture.map(c=>`<tr class="row" data-open="cells:${c.id}"><td class="ttl">${esc(c.title)}</td><td>${tag(c.status)}</td><td>${esc(c.markers||'')}</td><td>${c.passage!==''&&c.passage!=null?'P'+esc(c.passage):''}</td><td>${nice(c.split)}</td><td><b>${esc(c.ratio||'')}</b></td><td>${c.split?Math.round((new Date(iso(new Date()))-parse(c.split))/864e5):''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="hint">Nothing in culture. Add them under “Cell lines”.</div>'}</div></div>
   ${short.size?`<div class="callout warn"><span>⚠️</span><div><b>Check these stocks before this week</b><ul class="plain">${[...short.values()].map(({r,ex})=>`<li><a href="#" data-open="reagents:${r.id}">${esc(r.title)}</a> is <b>${esc(r.status)}</b> · needed for ${esc(ex.join(', '))}</li>`).join('')}</ul></div></div>`
      :`<div class="callout"><span>✅</span><div><b>Stocks</b><div class="hint">No reagent for this week's protocols is marked Low, Out or Make new.</div></div></div>`}
@@ -285,6 +296,13 @@ function weekPage(){
   <h2>🗒️ Notes for this week</h2>
   <textarea class="block" id="wknotes" placeholder="Plans, ideas, things to order...">${esc(notes)}</textarea>
   </div>`;
+}
+/* open to-dos (from emails, Slack or typed in), most urgent first */
+function todoBox(){
+  const pr={High:0,Medium:1,'Low prio':2};
+  const open=DB.todos.filter(t=>t.status!=='Done').sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3)||(a.due||'9').localeCompare(b.due||'9'));
+  if(!open.length)return `<div class="callout"><span>✅</span><div><b>To-dos</b><div class="hint">Nothing open. Import the daily to-do file with “Import backup”.</div></div></div>`;
+  return `<div class="callout"><span>✅</span><div style="flex:1;min-width:0"><b>Open to-dos (${open.length})</b><ul class="plain">${open.map(t=>`<li><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a> ${tag(t.priority)}${t.due?' · due '+nice(t.due):''}${t.from?' · '+esc(t.from):''}${/^https:\/\//.test(t.link||'')?` · <a href="${esc(t.link)}" target="_blank" rel="noopener">open ↗</a>`:''}</li>`).join('')}</ul></div></div>`;
 }
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
 
