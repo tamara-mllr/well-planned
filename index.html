@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WellPlanned</title>
+<meta http-equiv="Cache-Control" content="no-cache">
 <style>
 :root{
   --bg:#ffffff; --side:#f7f7f5; --text:#37352f; --muted:#787774; --line:#e9e9e7; --hover:#efefed;
@@ -401,15 +402,17 @@ function exportData(){
 }
 /* add entries from an import pack; entries whose name already exists are kept as they are */
 function mergeImport(d){
-  const map={};let added=0,skipped=0;
+  const map={},upd=[];let added=0,updated=0;
   for(const c of Object.keys(SCHEMA)){(d[c]||[]).forEach(r=>{const ex=DB[c].find(x=>(x.title||'').trim().toLowerCase()===(r.title||'').trim().toLowerCase());
-    if(ex){map[r.id]=ex.id;skipped++}else{map[r.id]=r.id;DB[c].push(r);added++}})}
+    if(ex){map[r.id]=ex.id;upd.push([ex,r]);updated++}else{map[r.id]=r.id;DB[c].push(r);added++}})}
+  /* existing entries with the same name: fields in the pack are updated, your other fields (stock, location, ...) stay */
+  upd.forEach(([ex,r])=>{for(const [k,v] of Object.entries(r))if(k!=='id')ex[k]=v});
   for(const c of Object.keys(SCHEMA))for(const f of SCHEMA[c].fields){if(f.t!=='rel'&&f.t!=='rels')continue;
     DB[c].forEach(r=>{if(f.t==='rel'&&map[r[f.k]])r[f.k]=map[r[f.k]];if(f.t==='rels'&&Array.isArray(r[f.k]))r[f.k]=[...new Set(r[f.k].map(x=>map[x]||x))]})}
   save();closePeek();render();
-  $('#main').insertAdjacentHTML('afterbegin',`<div class="page" style="padding-bottom:0"><div class="callout"><span>✅</span><div>Imported ${added} new entries${skipped?`, skipped ${skipped} that already existed`:''}.</div></div></div>`);
+  $('#main').insertAdjacentHTML('afterbegin',`<div class="page" style="padding-bottom:0"><div class="callout"><span>✅</span><div>Imported ${added} new entries${updated?` and updated ${updated} existing ones`:''}.</div></div></div>`);
 }
-$('#importfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(d.wellplannedImport==='merge'){mergeImport(d);return}if(!d.experiments)throw 0;DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page"><div class="callout warn">That file is not a WellPlanned backup.</div></div>')}})};
+$('#importfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t.replace(/^\uFEFF/,''));const known=Object.keys(SCHEMA).some(k=>Array.isArray(d[k]));if(!known)throw 0;if(d.wellplannedImport||!d.experiments){mergeImport(d);return}DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page" style="padding-bottom:0"><div class="callout warn">That file is not a WellPlanned backup or import file. If it should be, reload the page with Ctrl+F5 and try again.</div></div>')}})};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePeek()});
 
 render();
