@@ -77,6 +77,7 @@ h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bo
 .tgroup .th{font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
 .tgroup.now .th{color:var(--accent)}
 .tgroup.late .th{color:#d44c47}
+.sugg{border-left:2px solid var(--green);padding-left:6px;display:flex;flex-direction:column;gap:3px;margin-top:2px}
 .addday{margin-top:auto}
 @media (max-width:1000px){.weekwrap{grid-template-columns:1fr}.tpanel{max-height:none}}
 .todo{display:flex;gap:6px;align-items:flex-start;font-size:13px;line-height:1.35}
@@ -148,7 +149,7 @@ const COLORS = {Planned:'blue',Running:'yellow',Done:'green',Cancelled:'gray','D
   OK:'green',Low:'yellow',Out:'red','Make new':'orange',
   'Cell culture':'green',Microfabrication:'gray',Microfluidics:'blue',Differentiation:'purple',Staining:'pink','Live imaging':'yellow','Flow cytometry':'orange','Molecular biology':'brown',Treatment:'red',
   'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow',
-  Open:'blue','In progress':'yellow',Waiting:'purple',High:'red',Medium:'orange','Low prio':'gray',Email:'blue',Slack:'purple',Manual:'gray'};
+  Open:'blue','In progress':'yellow',Waiting:'purple',High:'red',Medium:'orange','Low prio':'gray',Email:'blue',Slack:'purple',Manual:'gray',Paper:'green',Latest:'blue'};
 
 /* Each "database" and its properties. t = type: text, date, number, select, long, rel (one link), rels (many links) */
 const SCHEMA = {
@@ -196,7 +197,8 @@ const SCHEMA = {
     {k:'status',t:'select',l:'Status',o:['Open','In progress','Waiting','Done']},
     {k:'priority',t:'select',l:'Priority',o:['High','Medium','Low prio']},
     {k:'due',t:'date',l:'Due'},
-    {k:'source',t:'select',l:'Source',o:['Email','Slack','Manual']},
+    {k:'source',t:'select',l:'Source',o:['Email','Slack','Manual','Paper']},
+    {k:'section',t:'text',l:'Paper section',ph:'e.g. Figure 3, Methods'},
     {k:'from',t:'text',l:'From',ph:'Who asked?'},
     {k:'link',t:'text',l:'Link to message',ph:'Gmail / Slack link'},
     {k:'notes',t:'long',l:'Notes'}]},
@@ -259,6 +261,7 @@ function sidebar(){
   const item=(v,ic,l)=>`<button class="nav ${view===v?'on':''}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`;
   $('#sb').innerHTML=`<div class="ws"><span class="logo">W</span>WellPlanned</div>
     ${item('week','📅','This week')}
+    ${item('paper','📝','Paper')}
     <div class="sbsec">Databases</div>
     ${Object.entries(SCHEMA).map(([k,s])=>item(k,s.icon,s.label)).join('')}
     <div class="sbsec">Links</div>
@@ -271,7 +274,8 @@ function sidebar(){
   document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
   $('#exp').onclick=exportData; $('#imp').onclick=()=>$('#importfile').click();
 }
-function render(){sidebar(); $('#main').innerHTML = view==='week'?weekPage():tablePage(view); bindMain()}
+function pageHtml(){return view==='week'?weekPage():view==='paper'?paperPage():tablePage(view)}
+function render(){sidebar(); $('#main').innerHTML = pageHtml(); bindMain(); if(view==='paper')listFiles()}
 
 /* ============ Week page ============ */
 function weekPage(){
@@ -318,6 +322,16 @@ function weekPage(){
   <textarea class="block" id="wknotes" placeholder="Plans, ideas, things to order...">${esc(notes)}</textarea>
   </div>`;
 }
+/* Free days = weekdays from today on with no experiment planned. Open paper to-dos without a date are spread over them, a few per day. */
+function paperSuggestions(mon){
+  const today=iso(new Date()), per=Number(DB.settings?.paperPerDay??2), pr={High:0,Medium:1,'Low prio':2};
+  const queue=DB.todos.filter(t=>t.source==='Paper'&&!t.due&&t.status!=='Done').sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3)||(a.order??0)-(b.order??0));
+  const out={};
+  for(let i=0;i<5&&queue.length;i++){const ds=iso(addDays(mon,i));if(ds<today)continue;
+    if(DB.experiments.some(e=>e.date===ds&&e.status!=='Cancelled'))continue;
+    out[ds]=queue.splice(0,per)}
+  return out;
+}
 /* to-do panel next to the week: overdue, each day of the week, then no date */
 function todoPanel(mon){
   const pr={High:0,Medium:1,'Low prio':2}, today=iso(new Date()), wk=iso(mon), sun=iso(addDays(mon,6));
@@ -326,15 +340,45 @@ function todoPanel(mon){
   const group=(label,list,cls='')=>list.length?`<div class="tgroup ${cls}"><div class="th">${label}</div>${sort(list).map(item).join('')}</div>`:'';
   const overdue=DB.todos.filter(t=>t.status!=='Done'&&t.due&&t.due<wk&&wk<=today);
   let html=group('Overdue',overdue,'late');
-  for(let i=0;i<7;i++){const d=addDays(mon,i),ds=iso(d);
-    html+=group(`${d.toLocaleDateString(undefined,{weekday:'short'})} ${d.getDate()}.${d.getMonth()+1}.${ds===today?' · today':''}`,DB.todos.filter(t=>t.due===ds),ds===today?'now':'')}
-  html+=group('No date',DB.todos.filter(t=>!t.due&&t.status!=='Done'));
+  const sugg=paperSuggestions(mon);
+  for(let i=0;i<7;i++){const d=addDays(mon,i),ds=iso(d), list=DB.todos.filter(t=>t.due===ds), sg=sugg[ds]||[];
+    const label=`${d.toLocaleDateString(undefined,{weekday:'short'})} ${d.getDate()}.${d.getMonth()+1}.${ds===today?' · today':''}`;
+    if(list.length||sg.length)html+=`<div class="tgroup ${ds===today?'now':''}"><div class="th">${label}</div>${sort(list).map(item).join('')}${sg.length?`<div class="sugg"><div class="hint">📝 Free day: paper</div>${sg.map(item).join('')}</div>`:''}</div>`}
+  html+=group('No date',DB.todos.filter(t=>!t.due&&t.status!=='Done'&&t.source!=='Paper'));
   const open=DB.todos.filter(t=>t.status!=='Done').length;
   const def=today>=wk&&today<=sun?today:wk;
   const opts=[...Array(7)].map((_,i)=>{const ds=iso(addDays(mon,i));return `<option value="${ds}" ${ds===def?'selected':''}>${addDays(mon,i).toLocaleDateString(undefined,{weekday:'short',day:'numeric'})}</option>`}).join('')+'<option value="">No date</option>';
   return `<aside class="tpanel"><div class="tphead"><b>✅ To-dos</b><span class="hint">${open} open</span></div>
     <div class="tpadd"><input id="todonew" placeholder="Add a to-do, press Enter"><select id="tododay" aria-label="Day">${opts}</select></div>
     ${html||'<div class="hint">Nothing yet. Add one above, or import the daily to-do file with “Import backup”.</div>'}</aside>`;
+}
+/* ============ Paper page ============ */
+function paperPage(){
+  const pr={High:0,Medium:1,'Low prio':2};
+  const todos=DB.todos.filter(t=>t.source==='Paper').sort((a,b)=>(a.status==='Done')-(b.status==='Done')||(pr[a.priority]??3)-(pr[b.priority]??3)||(a.order??0)-(b.order??0));
+  const open=todos.filter(t=>t.status!=='Done').length, per=DB.settings?.paperPerDay??2;
+  return `<div class="page"><div class="pico">📝</div><h1>Paper</h1>
+  <div class="sub">Paper versions and the paper to-do list. Files stay in this browser only; nothing is uploaded to GitHub.</div>
+  <h2>📄 Versions</h2>
+  <div class="toolbar"><label class="btn pri" style="cursor:pointer">+ Upload a version<input type="file" id="paperfile" accept=".pdf,.doc,.docx,.tex,.odt,.txt,.md" hidden></label><span class="hint">PDF, Word or LaTeX</span></div>
+  <div id="paperfiles" class="hint">Loading…</div>
+  <h2>✅ Paper to-dos <span class="hint" style="font-weight:400;font-size:14px">${open} open</span></h2>
+  <div class="tpadd" style="max-width:640px"><input id="papernew" placeholder="Add a paper to-do, press Enter"><input id="papersec" placeholder="Section (optional)" style="max-width:180px;flex:none"></div>
+  <div class="tgroup" style="margin-top:10px;max-width:640px">${todos.map(t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><div><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a>${t.section?` <span class="hint">· ${esc(t.section)}</span>`:''}${t.priority?' '+tag(t.priority):''}${t.due?` <span class="hint">· planned ${nice(t.due)}</span>`:''}</div></div>`).join('')||'<div class="hint">No paper to-dos yet.</div>'}</div>
+  <div class="callout" style="max-width:640px;margin-top:20px"><span>📅</span><div><b>Free days</b><div class="hint">On weekdays without a planned experiment, the to-do panel on “This week” suggests
+   <input id="paperper" type="number" min="0" max="10" value="${esc(per)}" style="width:3.2em"> open paper to-dos (High priority first). Give a to-do a due date to pin it to a specific day.</div></div></div>
+  </div>`;
+}
+/* paper files live in IndexedDB (too big for localStorage) */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('wellplanned-files',1);r.onupgradeneeded=()=>r.result.createObjectStore('files',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function fileStore(mode,fn){const db=await idb();return new Promise((res,rej)=>{const tx=db.transaction('files',mode);const q=fn(tx.objectStore('files'));tx.oncomplete=()=>res(q&&q.result);tx.onerror=()=>rej(tx.error)})}
+async function listFiles(){
+  const box=$('#paperfiles');if(!box)return;
+  try{const all=(await fileStore('readonly',st=>st.getAll()))||[];all.sort((a,b)=>b.added.localeCompare(a.added));
+    box.className='';box.innerHTML=all.length?`<div class="tblwrap"><table><thead><tr><th>File</th><th>Added</th><th>Size</th><th></th></tr></thead><tbody>${all.map((f,i)=>`<tr><td class="ttl">📄 ${esc(f.name)} ${i===0?tag('Latest'):''}</td><td>${new Date(f.added).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td><td>${(f.blob.size/1e6).toFixed(1)} MB</td><td style="white-space:nowrap"><button class="ghost" data-fopen="${f.id}">Open</button><button class="ghost" data-fdel="${f.id}">Delete</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="hint">No version uploaded yet.</div>';
+    box.querySelectorAll('[data-fopen]').forEach(b=>b.onclick=()=>{const f=all.find(x=>x.id===b.dataset.fopen);const u=URL.createObjectURL(f.blob);const a=document.createElement('a');a.href=u;a.target='_blank';if(!/pdf/.test(f.blob.type))a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),60000)});
+    box.querySelectorAll('[data-fdel]').forEach(b=>b.onclick=async()=>{if(b.dataset.sure){await fileStore('readwrite',st=>st.delete(b.dataset.fdel));listFiles()}else{b.dataset.sure=1;b.textContent='Click again to delete'}});
+  }catch(e){box.innerHTML='<div class="hint">This browser does not allow storing files here (private window?).</div>'}
 }
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
 
@@ -413,7 +457,7 @@ function gcalLink(r){const d=r.date.replace(/-/g,''),n=iso(addDays(parse(r.date)
 function syncCell(cid){const cl=byId('cells',cid);if(!cl)return;const last=DB.splits.filter(x=>x.cell===cid&&x.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
   if(!last)return;cl.split=last.date;if(last.ratio)cl.ratio=last.ratio;if(last.passage!==''&&last.passage!=null)cl.passage=last.passage;if(last.vessel)cl.vessel=last.vessel}
 function closePeek(){$('#peek').classList.remove('open');peekRef=null}
-function refreshMain(){const y=$('#main').scrollTop;$('#main').innerHTML=view==='week'?weekPage():tablePage(view);bindMain();$('#main').scrollTop=y}
+function refreshMain(){const y=$('#main').scrollTop;$('#main').innerHTML=pageHtml();bindMain();if(view==='paper')listFiles();$('#main').scrollTop=y}
 function newRow(c,extra={}){const r={id:uid(),title:'',...extra};if(c==='experiments')r.status||='Planned';DB[c].push(r);save();refreshMain();openPeek(c,r.id);setTimeout(()=>$('.ptitle').focus(),50)}
 
 function bindMain(){
@@ -422,6 +466,10 @@ function bindMain(){
   m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>{const c=el.dataset.new, s=SCHEMA[c];newRow(c,s.tabsBy&&tabSel[c]?{[s.tabsBy]:tabSel[c]}:{})});
   m.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{const i=el.dataset.tab.indexOf(':');tabSel[el.dataset.tab.slice(0,i)]=el.dataset.tab.slice(i+1);refreshMain()});
   m.querySelectorAll('[data-todo]').forEach(el=>el.onchange=()=>{const t=byId('todos',el.dataset.todo);if(!t)return;t.status=el.checked?'Done':'Open';save();refreshMain()});
+  const pf=$('#paperfile');if(pf)pf.onchange=async()=>{const f=pf.files[0];if(!f)return;await fileStore('readwrite',st=>st.put({id:uid(),name:f.name,added:new Date().toISOString(),blob:f}));pf.value='';listFiles()};
+  const pn=$('#papernew');if(pn)pn.onkeydown=e=>{if(e.key!=='Enter'||!pn.value.trim())return;const sec=$('#papersec').value.trim();
+    DB.todos.push({id:uid(),title:pn.value.trim(),status:'Open',source:'Paper',section:sec,order:Date.now()});save();refreshMain();const n=$('#papernew');if(n)n.focus();if($('#papersec'))$('#papersec').value=sec};
+  const pp=$('#paperper');if(pp)pp.onchange=()=>{(DB.settings||={}).paperPerDay=Math.max(0,Math.min(10,Number(pp.value)||0));save()};
   const tn=$('#todonew');if(tn)tn.onkeydown=e=>{if(e.key!=='Enter'||!tn.value.trim())return;const day=$('#tododay').value;
     DB.todos.push({id:uid(),title:tn.value.trim(),status:'Open',source:'Manual',due:day});save();refreshMain();const n=$('#todonew');if(n)n.focus();if($('#tododay'))$('#tododay').value=day};
   m.querySelectorAll('[data-newday]').forEach(el=>el.onclick=()=>newRow('experiments',{date:el.dataset.newday}));
