@@ -240,7 +240,20 @@ try{DB=JSON.parse(localStorage.getItem(STORE_KEY))}catch(e){DB=null}
 if(!DB) DB=example();
 for(const k of Object.keys(SCHEMA)) DB[k] ||= [];
 DB.weeks ||= {};
-function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(DB))}catch(e){}}
+/* Automatic to-dos: the day after each split or droplet generation, change the medium to remove Y-27632 / CloneR2 */
+function isDropletRun(e){const p=byId('protocols',e.protocol);return !!p&&(p.category==='Microfluidics'||/droplet generation/i.test(p.title||''))}
+function syncAutoTodos(){
+  if(!DB.todos)return;const want={};
+  DB.splits.forEach(x=>{if(!x.date)return;const c=byId('cells',x.cell);
+    want[x.id]={title:`Medium change: remove Y-27632${c?' · '+(c.title||''):''}`,due:iso(addDays(parse(x.date),1)),notes:`Day after splitting${c?' '+c.title:''}${x.ratio?' ('+x.ratio+')':''}. Replace with fresh E8 Flex without Y-27632.`}});
+  DB.experiments.forEach(e=>{if(!e.date||e.status==='Cancelled'||!isDropletRun(e))return;
+    want[e.id]={title:`Medium change: remove CloneR2 · ${e.title||'droplets'}`,due:iso(addDays(parse(e.date),1)),notes:'Day after droplet generation. Replace with 3.5 mL StemScale per well (no CloneR2).'}});
+  DB.todos=DB.todos.filter(t=>!t.autoFor||want[t.autoFor]||t.status==='Done');
+  for(const [id,w] of Object.entries(want)){const t=DB.todos.find(t=>t.autoFor===id);
+    if(t){if(t.status!=='Done'){t.title=w.title;t.due=w.due}}
+    else DB.todos.push({id:uid(),autoFor:id,status:'Open',priority:'High',source:'Manual',section:'',...w})}
+}
+function save(){try{syncAutoTodos();localStorage.setItem(STORE_KEY,JSON.stringify(DB))}catch(e){}}
 save();
 
 /* ============ Helpers ============ */
@@ -336,7 +349,7 @@ function paperSuggestions(mon){
 function todoPanel(mon){
   const pr={High:0,Medium:1,'Low prio':2}, today=iso(new Date()), wk=iso(mon), sun=iso(addDays(mon,6));
   const sort=a=>a.sort((x,y)=>(x.status==='Done')-(y.status==='Done')||(pr[x.priority]??3)-(pr[y.priority]??3));
-  const item=t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><div><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a>${t.priority==='High'?' '+tag('High'):''}${/^https:\/\//.test(t.link||'')?` <a class="hint" href="${esc(t.link)}" target="_blank" rel="noopener">↗</a>`:''}</div></div>`;
+  const item=t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><div><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a>${t.priority==='High'?' '+tag('High'):''}${t.autoFor&&t.due&&t.status!=='Done'?` <a class="hint" href="${gcalTodo(t)}" target="_blank" rel="noopener" title="Add to Google Calendar">📅</a>`:''}${/^https:\/\//.test(t.link||'')?` <a class="hint" href="${esc(t.link)}" target="_blank" rel="noopener">↗</a>`:''}</div></div>`;
   const group=(label,list,cls='')=>list.length?`<div class="tgroup ${cls}"><div class="th">${label}</div>${sort(list).map(item).join('')}</div>`:'';
   const overdue=DB.todos.filter(t=>t.status!=='Done'&&t.due&&t.due<wk&&wk<=today);
   let html=group('Overdue',overdue,'late');
@@ -432,7 +445,7 @@ function openPeek(c,id){
       <div style="margin:6px 0"><button class="btn" id="logsplit">+ Log a split today</button></div>
       ${hist.length?`<ul class="plain">${hist.slice(0,6).map(x=>`<li><a href="#" data-peek="splits:${x.id}">${nice(x.date)}</a> · ${esc(x.ratio||'?')}${x.passage!==''&&x.passage!=null?' · P'+esc(x.passage):''}${x.confluence?' · '+esc(x.confluence)+'% confluent':''}</li>`).join('')}</ul>`:'<div class="hint">No splits logged yet. Logging each split (date, ratio, confluence) builds the data for predicting growth later.</div>'}</div></div>`}
   $('#peekin').innerHTML=`<div class="ptop"><span class="hint">${s.icon} ${esc(s.label)}</span>
-     <span>${c==='experiments'&&r.date?`<a class="ghost" target="_blank" rel="noopener" href="${gcalLink(r)}">+ Google Calendar</a>`:''}<button class="ghost" id="dup">Duplicate</button><button class="ghost" id="del">Delete</button><button class="ghost" id="close">✕ Close</button></span></div>
+     <span>${c==='experiments'&&r.date?`<a class="ghost" target="_blank" rel="noopener" href="${gcalLink(r)}">+ Google Calendar</a>`:''}${c==='todos'&&r.due?`<a class="ghost" target="_blank" rel="noopener" href="${gcalTodo(r)}">+ Google Calendar</a>`:''}<button class="ghost" id="dup">Duplicate</button><button class="ghost" id="del">Delete</button><button class="ghost" id="close">✕ Close</button></span></div>
     <input class="ptitle" data-f="title" value="${esc(r.title)}" placeholder="Untitled">
     ${props}${extra}${longs}`;
   $('#peek').classList.add('open');
@@ -450,6 +463,8 @@ function openPeek(c,id){
   $('#del').onclick=()=>{DB[c]=DB[c].filter(x=>x.id!==id);if(c==='splits'&&r.cell)syncCell(r.cell);save();closePeek();render()};
   $('#dup').onclick=()=>{const copy=JSON.parse(JSON.stringify(r));copy.id=uid();copy.title=(r.title||'Untitled')+' (copy)';if(c==='experiments'){copy.status='Planned';copy.deviations='';copy.results=''}DB[c].push(copy);save();render();openPeek(c,copy.id)};
 }
+function gcalTodo(t){const d=t.due.replace(/-/g,''),n=iso(addDays(parse(t.due),1)).replace(/-/g,'');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent('✅ '+(t.title||'To-do'))+'&dates='+d+'/'+n+'&details='+encodeURIComponent(t.notes||'')}
 function gcalLink(r){const d=r.date.replace(/-/g,''),n=iso(addDays(parse(r.date),1)).replace(/-/g,'');const p=byId('protocols',r.protocol);
   const det=[p?'Protocol: '+p.title:'',r.microscope?'Microscope: '+r.microscope:'',r.imaging?'Imaging: '+r.imaging:'',r.controls?'Controls: '+r.controls:''].filter(Boolean).join('\n');
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent('🧪 '+(r.title||'Experiment'))+'&dates='+d+'/'+n+'&details='+encodeURIComponent(det)}
