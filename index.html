@@ -77,6 +77,8 @@ h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bo
 .tgroup .th{font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
 .tgroup.now .th{color:var(--accent)}
 .tgroup.late .th{color:#d44c47}
+.ev{font-size:12px;line-height:1.3;background:var(--blue);border-radius:4px;padding:3px 6px;overflow-wrap:anywhere}
+.ev .evt{color:var(--muted);font-variant-numeric:tabular-nums}
 .sugg{border-left:2px solid var(--green);padding-left:6px;display:flex;flex-direction:column;gap:3px;margin-top:2px}
 .addday{margin-top:auto}
 @media (max-width:1000px){.weekwrap{grid-template-columns:1fr}.tpanel{max-height:none}}
@@ -135,7 +137,7 @@ textarea.block{width:100%;min-height:90px;border:1px solid var(--line);border-ra
 <aside id="sb"></aside>
 <main id="main"></main>
 <div id="peek"><div class="in" id="peekin"></div></div>
-<input type="file" id="importfile" accept=".json" hidden>
+<input type="file" id="importfile" accept=".json,.ics" hidden>
 
 <script>
 /* ============ Settings (guesses, easy to change) ============ */
@@ -240,6 +242,7 @@ try{DB=JSON.parse(localStorage.getItem(STORE_KEY))}catch(e){DB=null}
 if(!DB) DB=example();
 for(const k of Object.keys(SCHEMA)) DB[k] ||= [];
 DB.weeks ||= {};
+DB.events ||= [];
 /* Automatic to-dos: the day after each split or droplet generation, change the medium to remove Y-27632 / CloneR2 */
 function isDropletRun(e){const p=byId('protocols',e.protocol);return !!p&&(p.category==='Microfluidics'||/droplet generation/i.test(p.title||''))}
 function syncAutoTodos(){
@@ -297,12 +300,13 @@ function weekPage(){
   const exps=DB.experiments.filter(e=>e.date && e.date>=wk && e.date<=iso(sun)).sort((a,b)=>a.date.localeCompare(b.date));
   const days=[...Array(7)].map((_,i)=>{
     const d=addDays(mon,i), ds=iso(d);
+    const evs=eventsOn(ds).map(ev=>`<div class="ev" title="${esc(ev.title)}${ev.location?' · '+esc(ev.location):''}"><span class="evt">${evTime(ev,ds)}</span> ${esc(ev.title||'Busy')}</div>`).join('');
     const cards=exps.filter(e=>e.date===ds).map(e=>{
       const p=byId('protocols',e.protocol);
       return `<div class="card" data-open="experiments:${e.id}"><div class="t">${esc(e.title||'Untitled')}</div>
         ${tag(e.status)}<div class="m">${p?'📘 '+esc(p.title):''}${e.microscope?'<br>🔬 '+esc(e.microscope):''}</div></div>`}).join('');
     return `<div class="day ${ds===today?'today':''}"><div class="dayh"><b>${d.toLocaleDateString(undefined,{weekday:'short'})}</b>${d.getDate()}.${d.getMonth()+1}.</div>
-      ${cards}<button class="ghost addday" data-newday="${ds}" title="New experiment">+ New</button>
+      ${evs}${cards}<button class="ghost addday" data-newday="${ds}" title="New experiment">+ New</button>
 </div>`}).join('');
 
   // housekeeping checks
@@ -318,6 +322,7 @@ function weekPage(){
   return `<div class="page wide"><div class="pico">📅</div><h1>Week ${weekNo}</h1>
   <div class="sub">${mon.toLocaleDateString(undefined,{day:'numeric',month:'long'})} – ${sun.toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})}</div>
   <div class="toolbar"><button class="btn" data-wk="-1">← Previous</button><button class="btn" data-wk="0">This week</button><button class="btn" data-wk="1">Next →</button></div>
+  <div class="hint" style="margin:-4px 0 8px">📅 Blue items come from your Google Calendar${DB.eventsUpdated?`, updated ${new Date(DB.eventsUpdated).toLocaleDateString(undefined,{day:'numeric',month:'short'})}`:''}. To refresh: export your calendar (.ics) and load it with “Import backup”.</div>
   <div class="weekwrap"><div class="week">${days}</div>${todoPanel(mon)}</div>
 
   <h2>🧹 Housekeeping</h2>
@@ -335,13 +340,58 @@ function weekPage(){
   <textarea class="block" id="wknotes" placeholder="Plans, ideas, things to order...">${esc(notes)}</textarea>
   </div>`;
 }
-/* Free days = weekdays from today on with no experiment planned. Open paper to-dos without a date are spread over them, a few per day. */
+/* ============ Calendar events (from Google Calendar: .ics export or an import file) ============ */
+function evRange(ev){return ev.allDay?[parse(ev.start),parse(ev.end||iso(addDays(parse(ev.start),1)))]:[new Date(ev.start),new Date(ev.end||ev.start)]}
+function eventsOn(ds){const a=parse(ds),b=addDays(a,1);return DB.events.filter(ev=>{const [s,e]=evRange(ev);return s<b&&(e>a||+s===+e&&s>=a)}).sort((x,y)=>evRange(x)[0]-evRange(y)[0])}
+function hm(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function evTime(ev,ds){if(ev.allDay)return 'all day';const [s,e]=evRange(ev),a=parse(ds),b=addDays(a,1);
+  if(s<a&&e>b)return 'all day';if(s<a)return 'until '+hm(e);if(e>b)return 'from '+hm(s);return hm(s)}
+/* hours an event blocks between 08:00 and 18:00 that day */
+function busyHours(ds){const a=parse(ds);a.setHours(8);const b=parse(ds);b.setHours(18);let h=0;
+  eventsOn(ds).forEach(ev=>{if(ev.allDay){h+=10;return}const [s,e]=evRange(ev);h+=Math.max(0,(Math.min(e,b)-Math.max(s,a))/36e5)});return h}
+function parseICS(text){
+  const lines=text.replace(/\r?\n[ \t]/g,'').split(/\r?\n/), out=[], over=new Set();let cur=null;
+  const val=l=>l.slice(l.indexOf(':')+1), unesc=v=>v.replace(/\\n/gi,' ').replace(/\\([,;\\])/g,'$1');
+  const dt=(l)=>{const v=val(l).trim();if(/VALUE=DATE[;:]/.test(l)||/^\d{8}$/.test(v))return {d:v.slice(0,4)+'-'+v.slice(4,6)+'-'+v.slice(6,8),all:true};
+    const m=v.match(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)(Z?)$/);if(!m)return null;
+    const d=m[7]?new Date(Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6])):new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6]);return {d:d.toISOString(),all:false}};
+  for(const l of lines){
+    if(l==='BEGIN:VEVENT'){cur={ex:[]};continue}
+    if(l==='END:VEVENT'){if(cur&&cur.s&&cur.status!=='CANCELLED')out.push(cur);cur=null;continue}
+    if(!cur)continue;const k=l.split(/[;:]/)[0];
+    if(k==='SUMMARY')cur.title=unesc(val(l));else if(k==='LOCATION')cur.location=unesc(val(l));else if(k==='UID')cur.uid=val(l);
+    else if(k==='DTSTART')cur.s=dt(l);else if(k==='DTEND')cur.e=dt(l);else if(k==='RRULE')cur.rr=val(l);else if(k==='STATUS')cur.status=val(l);
+    else if(k==='EXDATE')val(l).split(',').forEach(x=>{const r=dt('X:'+x);if(r)cur.ex.push(r.d)});else if(k==='RECURRENCE-ID'){const r=dt(l);if(r)cur.rid=r.d}}
+  out.forEach(e=>{if(e.rid)over.add(e.uid+'|'+e.rid)});
+  const from=addDays(new Date(),-60), to=addDays(new Date(),365), res=[];
+  for(const e of out){const len=e.e?(e.s.all?parse(e.e.d)-parse(e.s.d):new Date(e.e.d)-new Date(e.s.d)):(e.s.all?864e5:0);
+    const mk=st=>({uid:e.uid,title:e.title||'Busy',location:e.location||'',allDay:e.s.all,start:st,end:e.s.all?iso(new Date(parse(st).getTime()+len+36e5*2)):new Date(new Date(st).getTime()+len).toISOString(),from:'ics'});
+    if(!e.rr||e.rid){res.push(mk(e.s.d));continue}
+    const r=Object.fromEntries(e.rr.split(';').map(x=>x.split('='))), iv=+(r.INTERVAL||1), cnt=r.COUNT?+r.COUNT:1e4;
+    const until=r.UNTIL?new Date(dt('X:'+r.UNTIL).d.length===10?parse(dt('X:'+r.UNTIL).d).getTime()+864e5:dt('X:'+r.UNTIL).d):to;
+    const days=r.BYDAY?r.BYDAY.split(',').map(x=>['SU','MO','TU','WE','TH','FR','SA'].indexOf(x.slice(-2))):null;
+    const s0=e.s.all?parse(e.s.d):new Date(e.s.d);let n=0;
+    if(r.FREQ!=='DAILY'&&r.FREQ!=='WEEKLY'){res.push(mk(e.s.d));continue}
+    for(let i=0;n<cnt&&i<800;i++){const d=new Date(s0);d.setDate(d.getDate()+i);if(d>until||d>to)break;
+      const wk=Math.floor((mondayOf(d)-mondayOf(s0))/(7*864e5)+.5);
+      const ok=r.FREQ==='DAILY'?i%iv===0:(wk%iv===0&&(days?days.includes(d.getDay()):d.getDay()===s0.getDay()));
+      if(!ok)continue;n++;const st=e.s.all?iso(d):d.toISOString();
+      if(d<from||e.ex.includes(st)||over.has(e.uid+'|'+st))continue;res.push(mk(st))}}
+  return res;
+}
+function importEvents(list,kind,range){
+  DB.events=DB.events.filter(ev=>kind==='ics'?ev.from!=='ics':!(ev.from===kind&&(!range||(ev.start>=range[0]&&ev.start<range[1]))));
+  DB.events.push(...list.map(ev=>({...ev,from:kind})));DB.eventsUpdated=new Date().toISOString();save();closePeek();render();
+  $('#main').insertAdjacentHTML('afterbegin',`<div class="page" style="padding-bottom:0"><div class="callout"><span>📅</span><div>Imported ${list.length} calendar events.</div></div></div>`);
+}
+/* Free days = weekdays from today on with no experiment planned and less than 3 h of calendar events. Open paper to-dos without a date are spread over them, a few per day. */
 function paperSuggestions(mon){
   const today=iso(new Date()), per=Number(DB.settings?.paperPerDay??2), pr={High:0,Medium:1,'Low prio':2};
   const queue=DB.todos.filter(t=>t.source==='Paper'&&!t.due&&t.status!=='Done').sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3)||(a.order??0)-(b.order??0));
   const out={};
   for(let i=0;i<5&&queue.length;i++){const ds=iso(addDays(mon,i));if(ds<today)continue;
     if(DB.experiments.some(e=>e.date===ds&&e.status!=='Cancelled'))continue;
+    if(busyHours(ds)>=3)continue;
     out[ds]=queue.splice(0,per)}
   return out;
 }
@@ -378,7 +428,7 @@ function paperPage(){
   <h2>✅ Paper to-dos <span class="hint" style="font-weight:400;font-size:14px">${open} open</span></h2>
   <div class="tpadd" style="max-width:640px"><input id="papernew" placeholder="Add a paper to-do, press Enter"><input id="papersec" placeholder="Section (optional)" style="max-width:180px;flex:none"></div>
   <div class="tgroup" style="margin-top:10px;max-width:640px">${todos.map(t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><div><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a>${t.section?` <span class="hint">· ${esc(t.section)}</span>`:''}${t.priority?' '+tag(t.priority):''}${t.due?` <span class="hint">· planned ${nice(t.due)}</span>`:''}</div></div>`).join('')||'<div class="hint">No paper to-dos yet.</div>'}</div>
-  <div class="callout" style="max-width:640px;margin-top:20px"><span>📅</span><div><b>Free days</b><div class="hint">On weekdays without a planned experiment, the to-do panel on “This week” suggests
+  <div class="callout" style="max-width:640px;margin-top:20px"><span>📅</span><div><b>Free days</b><div class="hint">On weekdays without a planned experiment and with less than 3 h in your calendar, the to-do panel on “This week” suggests
    <input id="paperper" type="number" min="0" max="10" value="${esc(per)}" style="width:3.2em"> open paper to-dos (High priority first). Give a to-do a due date to pin it to a specific day.</div></div></div>
   </div>`;
 }
@@ -509,7 +559,7 @@ function mergeImport(d){
   save();closePeek();render();
   $('#main').insertAdjacentHTML('afterbegin',`<div class="page" style="padding-bottom:0"><div class="callout"><span>✅</span><div>Imported ${added} new entries${updated?` and updated ${updated} existing ones`:''}.</div></div></div>`);
 }
-$('#importfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t.replace(/^\uFEFF/,''));const known=Object.keys(SCHEMA).some(k=>Array.isArray(d[k]));if(!known)throw 0;if(d.wellplannedImport||!d.experiments){mergeImport(d);return}DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page" style="padding-bottom:0"><div class="callout warn">That file is not a WellPlanned backup or import file. If it should be, reload the page with Ctrl+F5 and try again.</div></div>')}})};
+$('#importfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{if(/^\uFEFF?BEGIN:VCALENDAR/.test(t)){importEvents(parseICS(t),'ics');return}const d=JSON.parse(t.replace(/^\uFEFF/,''));if(Array.isArray(d.events)){importEvents(d.events,d.eventsSource||'google',d.eventsRange);if(!Object.keys(SCHEMA).some(k=>Array.isArray(d[k])))return}const known=Object.keys(SCHEMA).some(k=>Array.isArray(d[k]));if(!known)throw 0;if(d.wellplannedImport||!d.experiments){mergeImport(d);return}DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page" style="padding-bottom:0"><div class="callout warn">That file is not a WellPlanned backup or import file. If it should be, reload the page with Ctrl+F5 and try again.</div></div>')}})};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePeek()});
 
 render();
