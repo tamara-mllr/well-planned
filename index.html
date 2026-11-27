@@ -64,7 +64,27 @@ h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bo
 .card:hover{background:var(--hover)}
 .card .t{font-weight:500;margin-bottom:3px}
 .card .m{color:var(--muted);font-size:12px}
-.addday{margin-top:auto;text-align:left}
+.addday{text-align:left}
+.page.wide{max-width:1400px}
+.weekwrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start}
+.week{grid-template-columns:repeat(7,minmax(110px,1fr))}
+.tpanel{background:var(--side);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-height:75vh;overflow:auto}
+.tphead{display:flex;justify-content:space-between;align-items:baseline}
+.tpadd{display:flex;gap:4px}
+.tpadd input{flex:1;min-width:0;border:1px solid var(--line);border-radius:5px;padding:4px 8px;background:var(--bg)}
+.tpadd select{border:1px solid var(--line);border-radius:5px;background:var(--bg);padding:2px 4px;font-size:12.5px}
+.tgroup{display:flex;flex-direction:column;gap:3px}
+.tgroup .th{font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
+.tgroup.now .th{color:var(--accent)}
+.tgroup.late .th{color:#d44c47}
+.addday{margin-top:auto}
+@media (max-width:1000px){.weekwrap{grid-template-columns:1fr}.tpanel{max-height:none}}
+.todo{display:flex;gap:6px;align-items:flex-start;font-size:13px;line-height:1.35}
+.todo input{margin:2px 0 0;flex:none;accent-color:var(--accent)}
+.todo a{text-decoration:none;overflow-wrap:anywhere}
+.todo.done a{text-decoration:line-through;color:var(--muted)}
+.todoadd{border:0;background:none;font-size:12.5px;padding:3px 0;width:100%;color:var(--muted);outline:none}
+.todoadd:focus{color:var(--text)}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 .tblwrap{overflow-x:auto}
 .tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin:8px 0}
@@ -127,7 +147,8 @@ const COLORS = {Planned:'blue',Running:'yellow',Done:'green',Cancelled:'gray','D
   Growing:'green',Ready:'blue',Frozen:'purple',Discarded:'gray',
   OK:'green',Low:'yellow',Out:'red','Make new':'orange',
   'Cell culture':'green',Microfabrication:'gray',Microfluidics:'blue',Differentiation:'purple',Staining:'pink','Live imaging':'yellow','Flow cytometry':'orange','Molecular biology':'brown',Treatment:'red',
-  'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow'};
+  'Primary antibody':'blue','Secondary antibody':'purple','Dye / stain':'pink','Chemical / buffer':'gray','Medium / supplement':'green','Drug / treatment':'red','Plasmid / virus':'orange',Kit:'brown',Consumable:'yellow',
+  Open:'blue','In progress':'yellow',Waiting:'purple',High:'red',Medium:'orange','Low prio':'gray',Email:'blue',Slack:'purple',Manual:'gray'};
 
 /* Each "database" and its properties. t = type: text, date, number, select, long, rel (one link), rels (many links) */
 const SCHEMA = {
@@ -170,6 +191,15 @@ const SCHEMA = {
     {k:'reagents',t:'rels',l:'Reagents needed',c:'reagents'},
     {k:'controls',t:'long',l:'Standard controls'},
     {k:'steps',t:'long',l:'Steps',ph:'1. ...\n2. ...',tall:true}]},
+  todos:{label:'To-dos',icon:'✅',one:'to-do',tabsBy:'status',cols:['title','status','priority','due','source','from'],fields:[
+    {k:'title',t:'text',l:'To-do'},
+    {k:'status',t:'select',l:'Status',o:['Open','In progress','Waiting','Done']},
+    {k:'priority',t:'select',l:'Priority',o:['High','Medium','Low prio']},
+    {k:'due',t:'date',l:'Due'},
+    {k:'source',t:'select',l:'Source',o:['Email','Slack','Manual']},
+    {k:'from',t:'text',l:'From',ph:'Who asked?'},
+    {k:'link',t:'text',l:'Link to message',ph:'Gmail / Slack link'},
+    {k:'notes',t:'long',l:'Notes'}]},
   reagents:{label:'Reagents & stocks',icon:'🧴',one:'reagent',tabsBy:'type',cols:['title','type','status','conc','dilution','location','expires'],fields:[
     {k:'title',t:'text',l:'Reagent'},
     {k:'type',t:'select',l:'Type',o:['Primary antibody','Secondary antibody','Dye / stain','Chemical / buffer','Medium / supplement','Drug / treatment','Plasmid / virus','Kit','Consumable']},
@@ -255,7 +285,8 @@ function weekPage(){
       return `<div class="card" data-open="experiments:${e.id}"><div class="t">${esc(e.title||'Untitled')}</div>
         ${tag(e.status)}<div class="m">${p?'📘 '+esc(p.title):''}${e.microscope?'<br>🔬 '+esc(e.microscope):''}</div></div>`}).join('');
     return `<div class="day ${ds===today?'today':''}"><div class="dayh"><b>${d.toLocaleDateString(undefined,{weekday:'short'})}</b>${d.getDate()}.${d.getMonth()+1}.</div>
-      ${cards}<button class="ghost addday" data-newday="${ds}">+ New</button></div>`}).join('');
+      ${cards}<button class="ghost addday" data-newday="${ds}" title="New experiment">+ New</button>
+</div>`}).join('');
 
   // housekeeping checks
   const culture=DB.cells.filter(c=>c.status==='Growing'||c.status==='Ready');
@@ -267,10 +298,10 @@ function weekPage(){
   const notes=DB.weeks[wk]?.notes||'';
   const weekNo=isoWeek(mon);
 
-  return `<div class="page"><div class="pico">📅</div><h1>Week ${weekNo}</h1>
+  return `<div class="page wide"><div class="pico">📅</div><h1>Week ${weekNo}</h1>
   <div class="sub">${mon.toLocaleDateString(undefined,{day:'numeric',month:'long'})} – ${sun.toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})}</div>
   <div class="toolbar"><button class="btn" data-wk="-1">← Previous</button><button class="btn" data-wk="0">This week</button><button class="btn" data-wk="1">Next →</button></div>
-  <div class="week">${days}</div>
+  <div class="weekwrap"><div class="week">${days}</div>${todoPanel(mon)}</div>
 
   <h2>🧹 Housekeeping</h2>
   <div class="callout"><span>🧫</span><div style="flex:1;min-width:0"><b>Cells in culture</b>${culture.length?`<div class="tblwrap"><table style="margin-top:6px"><thead><tr><th>Cell line</th><th>Status</th><th>Markers</th><th>Passage</th><th>Last split</th><th>Split ratio</th><th>Days since split</th></tr></thead><tbody>${culture.map(c=>`<tr class="row" data-open="cells:${c.id}"><td class="ttl">${esc(c.title)}</td><td>${tag(c.status)}</td><td>${esc(c.markers||'')}</td><td>${c.passage!==''&&c.passage!=null?'P'+esc(c.passage):''}</td><td>${nice(c.split)}</td><td><b>${esc(c.ratio||'')}</b></td><td>${c.split?Math.round((new Date(iso(new Date()))-parse(c.split))/864e5):''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="hint">Nothing in culture. Add them under “Cell lines”.</div>'}</div></div>
@@ -286,6 +317,24 @@ function weekPage(){
   <h2>🗒️ Notes for this week</h2>
   <textarea class="block" id="wknotes" placeholder="Plans, ideas, things to order...">${esc(notes)}</textarea>
   </div>`;
+}
+/* to-do panel next to the week: overdue, each day of the week, then no date */
+function todoPanel(mon){
+  const pr={High:0,Medium:1,'Low prio':2}, today=iso(new Date()), wk=iso(mon), sun=iso(addDays(mon,6));
+  const sort=a=>a.sort((x,y)=>(x.status==='Done')-(y.status==='Done')||(pr[x.priority]??3)-(pr[y.priority]??3));
+  const item=t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><div><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a>${t.priority==='High'?' '+tag('High'):''}${/^https:\/\//.test(t.link||'')?` <a class="hint" href="${esc(t.link)}" target="_blank" rel="noopener">↗</a>`:''}</div></div>`;
+  const group=(label,list,cls='')=>list.length?`<div class="tgroup ${cls}"><div class="th">${label}</div>${sort(list).map(item).join('')}</div>`:'';
+  const overdue=DB.todos.filter(t=>t.status!=='Done'&&t.due&&t.due<wk&&wk<=today);
+  let html=group('Overdue',overdue,'late');
+  for(let i=0;i<7;i++){const d=addDays(mon,i),ds=iso(d);
+    html+=group(`${d.toLocaleDateString(undefined,{weekday:'short'})} ${d.getDate()}.${d.getMonth()+1}.${ds===today?' · today':''}`,DB.todos.filter(t=>t.due===ds),ds===today?'now':'')}
+  html+=group('No date',DB.todos.filter(t=>!t.due&&t.status!=='Done'));
+  const open=DB.todos.filter(t=>t.status!=='Done').length;
+  const def=today>=wk&&today<=sun?today:wk;
+  const opts=[...Array(7)].map((_,i)=>{const ds=iso(addDays(mon,i));return `<option value="${ds}" ${ds===def?'selected':''}>${addDays(mon,i).toLocaleDateString(undefined,{weekday:'short',day:'numeric'})}</option>`}).join('')+'<option value="">No date</option>';
+  return `<aside class="tpanel"><div class="tphead"><b>✅ To-dos</b><span class="hint">${open} open</span></div>
+    <div class="tpadd"><input id="todonew" placeholder="Add a to-do, press Enter"><select id="tododay" aria-label="Day">${opts}</select></div>
+    ${html||'<div class="hint">Nothing yet. Add one above, or import the daily to-do file with “Import backup”.</div>'}</aside>`;
 }
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
 
@@ -372,6 +421,9 @@ function bindMain(){
   m.querySelectorAll('[data-open]').forEach(el=>el.onclick=e=>{e.preventDefault();const [c,id]=el.dataset.open.split(':');openPeek(c,id)});
   m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>{const c=el.dataset.new, s=SCHEMA[c];newRow(c,s.tabsBy&&tabSel[c]?{[s.tabsBy]:tabSel[c]}:{})});
   m.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{const i=el.dataset.tab.indexOf(':');tabSel[el.dataset.tab.slice(0,i)]=el.dataset.tab.slice(i+1);refreshMain()});
+  m.querySelectorAll('[data-todo]').forEach(el=>el.onchange=()=>{const t=byId('todos',el.dataset.todo);if(!t)return;t.status=el.checked?'Done':'Open';save();refreshMain()});
+  const tn=$('#todonew');if(tn)tn.onkeydown=e=>{if(e.key!=='Enter'||!tn.value.trim())return;const day=$('#tododay').value;
+    DB.todos.push({id:uid(),title:tn.value.trim(),status:'Open',source:'Manual',due:day});save();refreshMain();const n=$('#todonew');if(n)n.focus();if($('#tododay'))$('#tododay').value=day};
   m.querySelectorAll('[data-newday]').forEach(el=>el.onclick=()=>newRow('experiments',{date:el.dataset.newday}));
   m.querySelectorAll('[data-wk]').forEach(el=>el.onclick=()=>{const v=+el.dataset.wk;weekOffset=v?weekOffset+v:0;render()});
   const n=$('#wknotes'); if(n)n.oninput=()=>{const wk=iso(addDays(mondayOf(new Date()),weekOffset*7));(DB.weeks[wk]||={}).notes=n.value;save()};
@@ -388,7 +440,7 @@ function mergeImport(d){
   for(const c of Object.keys(SCHEMA)){(d[c]||[]).forEach(r=>{const ex=DB[c].find(x=>(x.title||'').trim().toLowerCase()===(r.title||'').trim().toLowerCase());
     if(ex){map[r.id]=ex.id;upd.push([ex,r]);updated++}else{map[r.id]=r.id;DB[c].push(r);added++}})}
   /* existing entries with the same name: fields in the pack are updated, your other fields (stock, location, ...) stay */
-  upd.forEach(([ex,r])=>{for(const [k,v] of Object.entries(r))if(k!=='id')ex[k]=v});
+  upd.forEach(([ex,r])=>{if(DB.todos.includes(ex))return;for(const [k,v] of Object.entries(r))if(k!=='id')ex[k]=v});
   for(const c of Object.keys(SCHEMA))for(const f of SCHEMA[c].fields){if(f.t!=='rel'&&f.t!=='rels')continue;
     DB[c].forEach(r=>{if(f.t==='rel'&&map[r[f.k]])r[f.k]=map[r[f.k]];if(f.t==='rels'&&Array.isArray(r[f.k]))r[f.k]=[...new Set(r[f.k].map(x=>map[x]||x))]})}
   save();closePeek();render();
