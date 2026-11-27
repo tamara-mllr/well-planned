@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WellPlanned</title>
+<style>
+:root{
+  --bg:#ffffff; --side:#f7f7f5; --text:#37352f; --muted:#787774; --line:#e9e9e7; --hover:#efefed;
+  --accent:#2383e2; --card:#ffffff; --shadow:0 1px 3px rgba(15,15,15,.08),0 0 0 1px rgba(15,15,15,.05);
+  --gray:#e3e2e0; --brown:#eee0da; --orange:#fadec9; --yellow:#fdecc8; --green:#dbeddb; --blue:#d3e5ef; --purple:#e8deee; --pink:#f5e0e9; --red:#ffe2dd;
+  --tagtext:#37352f; --warn:#fdecc8; --warntext:#8a5a00;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#191919; --side:#202020; --text:#e6e6e4; --muted:#9b9b9b; --line:#2f2f2f; --hover:#2a2a2a;
+    --card:#252525; --shadow:0 0 0 1px rgba(255,255,255,.08);
+    --gray:#373737; --brown:#4a3a33; --orange:#5c3b23; --yellow:#564328; --green:#2b4632; --blue:#28456c; --purple:#443257; --pink:#4e2c3c; --red:#5e3433;
+    --tagtext:#e6e6e4; --warn:#564328; --warntext:#f5d38c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#191919; --side:#202020; --text:#e6e6e4; --muted:#9b9b9b; --line:#2f2f2f; --hover:#2a2a2a;
+  --card:#252525; --shadow:0 0 0 1px rgba(255,255,255,.08);
+  --gray:#373737; --brown:#4a3a33; --orange:#5c3b23; --yellow:#564328; --green:#2b4632; --blue:#28456c; --purple:#443257; --pink:#4e2c3c; --red:#5e3433;
+  --tagtext:#e6e6e4; --warn:#564328; --warntext:#f5d38c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;display:flex}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:inherit}
+#sb{width:240px;flex:none;background:var(--side);border-right:1px solid var(--line);height:100vh;position:sticky;top:0;padding:12px 8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+#sb .ws{font-weight:600;padding:6px 10px 12px;display:flex;align-items:center;gap:8px}
+#sb .ws .logo{width:22px;height:22px;border-radius:4px;background:var(--text);color:var(--bg);display:grid;place-items:center;font-size:12px}
+.nav{display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:5px;cursor:pointer;color:var(--muted);border:0;background:none;text-align:left;width:100%}
+.nav:hover{background:var(--hover)}
+.nav.on{background:var(--hover);color:var(--text);font-weight:500}
+.nav .ic{width:20px;text-align:center}
+.sbsec{font-size:12px;color:var(--muted);padding:14px 10px 4px;font-weight:500}
+.sbfoot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:12px}
+#main{flex:1;min-width:0;height:100vh;overflow:auto}
+.page{max-width:1100px;margin:0 auto;padding:48px 56px 120px}
+.pico{font-size:52px;line-height:1}
+h1{font-size:34px;font-weight:700;margin:10px 0 4px}
+.sub{color:var(--muted);margin-bottom:24px}
+h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 12px}
+.btn{border:1px solid var(--line);background:var(--card);padding:4px 10px;border-radius:5px;cursor:pointer}
+.btn:hover{background:var(--hover)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.ghost{border:0;background:none;color:var(--muted);cursor:pointer;padding:4px 8px;border-radius:5px}
+.ghost:hover{background:var(--hover);color:var(--text)}
+.tag{display:inline-block;padding:0 6px;border-radius:3px;font-size:12.5px;line-height:20px;white-space:nowrap;color:var(--tagtext);margin:1px 4px 1px 0}
+.callout{display:flex;gap:10px;padding:14px 16px;border-radius:6px;background:var(--side);margin:12px 0}
+.callout.warn{background:var(--warn);color:var(--warntext)}
+.week{display:grid;grid-template-columns:repeat(7,minmax(130px,1fr));gap:8px;overflow-x:auto;padding-bottom:6px}
+.day{background:var(--side);border-radius:6px;padding:8px;min-height:150px;display:flex;flex-direction:column;gap:6px}
+.day.today{outline:2px solid var(--accent);outline-offset:-2px}
+.dayh{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.dayh b{color:var(--text)}
+.card{background:var(--card);box-shadow:var(--shadow);border-radius:5px;padding:8px;cursor:pointer;font-size:13px}
+.card:hover{background:var(--hover)}
+.card .t{font-weight:500;margin-bottom:3px}
+.card .m{color:var(--muted);font-size:12px}
+.addday{margin-top:auto;text-align:left}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+.tblwrap{overflow-x:auto}
+th{font-weight:400;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--hover)}
+td.ttl{font-weight:500}
+.empty{color:var(--muted);padding:12px 8px}
+ul.plain{margin:4px 0;padding-left:20px}
+ul.plain li{margin:2px 0}
+textarea.block{width:100%;min-height:90px;border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg);resize:vertical}
+/* side peek */
+#peek{position:fixed;top:0;right:0;height:100vh;width:min(560px,100vw);background:var(--bg);box-shadow:-4px 0 24px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .18s;overflow:auto;z-index:10}
+#peek.open{transform:none}
+#peek .in{padding:16px 36px 80px}
+.ptop{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.ptitle{font-size:28px;font-weight:700;border:0;background:none;width:100%;outline:none;padding:0;margin-bottom:12px}
+.prop{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:start;padding:3px 0}
+.prop>label{color:var(--muted);padding:4px 0}
+.prop input,.prop select{border:1px solid transparent;background:none;padding:3px 6px;border-radius:4px;width:100%}
+.prop input:hover,.prop select:hover,.prop input:focus,.prop select:focus{background:var(--hover);outline:none}
+.lbl{color:var(--muted);margin:18px 0 4px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 6px}
+.chip{background:var(--gray);border-radius:3px;padding:0 6px;font-size:12.5px;display:flex;gap:4px;align-items:center}
+.chip button{border:0;background:none;cursor:pointer;color:var(--muted);padding:0}
+.hint{font-size:12px;color:var(--muted)}
+@media (max-width:760px){
+  body{flex-direction:column}
+  #sb{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;padding:8px 16px;border-right:0;border-bottom:1px solid var(--line)}
+  #sb .ws,.sbsec{display:none}
+  .nav{width:auto;white-space:nowrap}
+  .sbfoot{margin:0;flex-direction:row;padding:0}
+  #main{height:auto}
+  .page{padding:24px 16px 80px}
+  h1{font-size:28px}
+  .prop{grid-template-columns:110px 1fr}
+  #peek .in{padding:16px}
+}
+</style>
+</head>
+<body>
+<aside id="sb"></aside>
+<main id="main"></main>
+<div id="peek"><div class="in" id="peekin"></div></div>
+<input type="file" id="importfile" accept=".json" hidden>
+
+<script>
+/* ============ Settings (guesses, easy to change) ============ */
+const BOOKING_URL = 'https://booking.crc.tum.de/CPA/Web/calendar.php';
+const STORE_KEY = 'labplanner.v1';
+const GCAL_URL = 'https://calendar.google.com/calendar/u/0/r';
+
+/* Colours for select options, Notion-style */
+const COLORS = {Planned:'blue',Running:'yellow',Done:'green',Cancelled:'gray','Done with deviations':'orange',
+  Growing:'green',Ready:'blue',Frozen:'purple',Discarded:'gray',
+  OK:'green',Low:'yellow',Out:'red','Make new':'orange'};
+
+/* Each "database" and its properties. t = type: text, date, number, select, long, rel (one link), rels (many links) */
+const SCHEMA = {
+  experiments:{label:'Experiment log',icon:'🧪',one:'experiment',fields:[
+    {k:'title',t:'text',l:'Name'},
+    {k:'date',t:'date',l:'Date'},
+    {k:'status',t:'select',l:'Status',o:['Planned','Running','Done','Done with deviations','Cancelled']},
+    {k:'protocol',t:'rel',l:'Protocol',c:'protocols'},
+    {k:'cells',t:'rels',l:'Cells',c:'cells'},
+    {k:'microscope',t:'text',l:'Microscope'},
+    {k:'imaging',t:'long',l:'Imaging plan',ph:'Objective, channels / filters, exposure, z-stack, positions, time-lapse interval...'},
+    {k:'controls',t:'long',l:'Controls',ph:'e.g. untreated, secondary-only, single stains for bleed-through...'},
+    {k:'deviations',t:'long',l:'Deviations from protocol',ph:'What did you do differently? Why?'},
+    {k:'results',t:'long',l:'Results and notes',ph:'Where are the images saved? Segmentation / quantification notes...'}]},
+  cells:{label:'Cells in culture',icon:'🧫',one:'cell culture',fields:[
+    {k:'title',t:'text',l:'Cell line'},
+    {k:'status',t:'select',l:'Status',o:['Growing','Ready','Frozen','Discarded']},
+    {k:'passage',t:'number',l:'Passage'},
+    {k:'vessel',t:'text',l:'Vessel'},
+    {k:'split',t:'date',l:'Last split'},
+    {k:'notes',t:'long',l:'Notes'}]},
+  protocols:{label:'Protocols',icon:'📘',one:'protocol',fields:[
+    {k:'title',t:'text',l:'Name'},
+    {k:'category',t:'select',l:'Category',o:['Staining','Transfection','Treatment','Fixation','Live imaging','Other']},
+    {k:'duration',t:'text',l:'Duration'},
+    {k:'reagents',t:'rels',l:'Reagents needed',c:'reagents'},
+    {k:'controls',t:'long',l:'Standard controls'},
+    {k:'steps',t:'long',l:'Steps',ph:'1. ...\n2. ...',tall:true}]},
+  reagents:{label:'Reagents & stocks',icon:'🧴',one:'reagent',fields:[
+    {k:'title',t:'text',l:'Reagent'},
+    {k:'status',t:'select',l:'Stock',o:['OK','Low','Out','Make new']},
+    {k:'conc',t:'text',l:'Stock concentration'},
+    {k:'location',t:'text',l:'Location'},
+    {k:'expires',t:'date',l:'Expires'},
+    {k:'notes',t:'long',l:'Notes / recipe'}]}
+};
+
+/* ============ Data (saved in this browser only) ============ */
+function uid(){return Math.random().toString(36).slice(2,10)}
+function example(){
+  const m = mondayOf(new Date()), d = n => iso(addDays(m,n));
+  const r1={id:uid(),title:'PFA 4%',status:'OK',conc:'4% in PBS',location:'Fridge 2',expires:d(30)};
+  const r2={id:uid(),title:'DAPI',status:'Low',conc:'1 mg/ml',location:'-20 °C box A'};
+  const r3={id:uid(),title:'Triton X-100',status:'OK',conc:'10%',location:'Shelf'};
+  const p1={id:uid(),title:'IF staining (example)',category:'Staining',duration:'2 days',reagents:[r1.id,r2.id,r3.id],
+    controls:'Secondary antibody only\nUnstained cells',steps:'1. Fix 15 min with 4% PFA\n2. Permeabilise 0.1% Triton 10 min\n3. Block ...\n4. Primary antibody overnight 4 °C\n5. Secondary + DAPI 1 h'};
+  const c1={id:uid(),title:'HeLa (example)',status:'Growing',passage:12,vessel:'T75',split:d(-3)};
+  return {
+    experiments:[{id:uid(),title:'IF of marker X (example)',date:d(1),status:'Planned',protocol:p1.id,cells:[c1.id],microscope:'Confocal (guess)',
+      imaging:'63x oil, DAPI + 488, z-stack 0.3 µm',controls:'Secondary only'}],
+    cells:[c1],protocols:[p1],reagents:[r1,r2,r3],weeks:{}
+  };
+}
+let DB;
+try{DB=JSON.parse(localStorage.getItem(STORE_KEY))}catch(e){DB=null}
+if(!DB) DB=example();
+for(const k of Object.keys(SCHEMA)) DB[k] ||= [];
+DB.weeks ||= {};
+function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(DB))}catch(e){}}
+save();
+
+/* ============ Helpers ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parse(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());const w=(x.getDay()+6)%7;return addDays(x,-w)}
+function nice(s){if(!s)return '';return parse(s).toLocaleDateString(undefined,{day:'numeric',month:'short'})}
+function byId(c,id){return DB[c].find(r=>r.id===id)}
+function tag(v){if(!v)return '';return `<span class="tag" style="background:var(--${COLORS[v]||'gray'})">${esc(v)}</span>`}
+function link(c,id){const r=byId(c,id);return r?`<span class="tag" style="background:var(--gray)">${SCHEMA[c].icon} ${esc(r.title||'Untitled')}</span>`:''}
+
+/* ============ Navigation ============ */
+let view='week', weekOffset=0, peekRef=null;
+function sidebar(){
+  const item=(v,ic,l)=>`<button class="nav ${view===v?'on':''}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`;
+  $('#sb').innerHTML=`<div class="ws"><span class="logo">W</span>WellPlanned</div>
+    ${item('week','📅','This week')}
+    <div class="sbsec">Databases</div>
+    ${Object.entries(SCHEMA).map(([k,s])=>item(k,s.icon,s.label)).join('')}
+    <div class="sbsec">Links</div>
+    <a class="nav" href="${BOOKING_URL}" target="_blank" rel="noopener"><span class="ic">🔬</span>Microscope booking ↗</a>
+    <a class="nav" href="${GCAL_URL}" target="_blank" rel="noopener"><span class="ic">🗓️</span>Google Calendar ↗</a>
+    <div class="sbfoot">
+      <button class="nav" id="exp"><span class="ic">⬇</span>Export backup</button>
+      <button class="nav" id="imp"><span class="ic">⬆</span>Import backup</button>
+    </div>`;
+  document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
+  $('#exp').onclick=exportData; $('#imp').onclick=()=>$('#importfile').click();
+}
+function render(){sidebar(); $('#main').innerHTML = view==='week'?weekPage():tablePage(view); bindMain()}
+
+/* ============ Week page ============ */
+function weekPage(){
+  const mon=addDays(mondayOf(new Date()),weekOffset*7), sun=addDays(mon,6);
+  const wk=iso(mon), today=iso(new Date());
+  const exps=DB.experiments.filter(e=>e.date && e.date>=wk && e.date<=iso(sun)).sort((a,b)=>a.date.localeCompare(b.date));
+  const days=[...Array(7)].map((_,i)=>{
+    const d=addDays(mon,i), ds=iso(d);
+    const cards=exps.filter(e=>e.date===ds).map(e=>{
+      const p=byId('protocols',e.protocol);
+      return `<div class="card" data-open="experiments:${e.id}"><div class="t">${esc(e.title||'Untitled')}</div>
+        ${tag(e.status)}<div class="m">${p?'📘 '+esc(p.title):''}${e.microscope?'<br>🔬 '+esc(e.microscope):''}</div></div>`}).join('');
+    return `<div class="day ${ds===today?'today':''}"><div class="dayh"><b>${d.toLocaleDateString(undefined,{weekday:'short'})}</b>${d.getDate()}.${d.getMonth()+1}.</div>
+      ${cards}<button class="ghost addday" data-newday="${ds}">+ New</button></div>`}).join('');
+
+  // housekeeping checks
+  const culture=DB.cells.filter(c=>c.status==='Growing'||c.status==='Ready');
+  const short=new Map();
+  exps.forEach(e=>{const p=byId('protocols',e.protocol); (p?.reagents||[]).forEach(rid=>{const r=byId('reagents',rid);
+    if(r && ['Low','Out','Make new'].includes(r.status)){if(!short.has(r.id))short.set(r.id,{r,ex:[]});short.get(r.id).ex.push(e.title||'Untitled')}})});
+  const noProto=exps.filter(e=>!e.protocol), noCtrl=exps.filter(e=>!e.controls), noImg=exps.filter(e=>!e.imaging);
+  const scopes=exps.filter(e=>e.microscope);
+  const notes=DB.weeks[wk]?.notes||'';
+  const weekNo=isoWeek(mon);
+
+  return `<div class="page"><div class="pico">📅</div><h1>Week ${weekNo}</h1>
+  <div class="sub">${mon.toLocaleDateString(undefined,{day:'numeric',month:'long'})} – ${sun.toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})}</div>
+  <div class="toolbar"><button class="btn" data-wk="-1">← Previous</button><button class="btn" data-wk="0">This week</button><button class="btn" data-wk="1">Next →</button></div>
+  <div class="week">${days}</div>
+
+  <h2>🧹 Housekeeping</h2>
+  <div class="callout"><span>🧫</span><div><b>Cells in culture</b>${culture.length?`<ul class="plain">${culture.map(c=>`<li><a href="#" data-open="cells:${c.id}">${esc(c.title)}</a> ${tag(c.status)} <span class="hint">${c.passage?'P'+esc(c.passage):''} ${esc(c.vessel||'')} ${c.split?'· split '+nice(c.split):''}</span></li>`).join('')}</ul>`:'<div class="hint">Nothing in culture. Add cells under “Cells in culture”.</div>'}</div></div>
+  ${short.size?`<div class="callout warn"><span>⚠️</span><div><b>Check these stocks before this week</b><ul class="plain">${[...short.values()].map(({r,ex})=>`<li><a href="#" data-open="reagents:${r.id}">${esc(r.title)}</a> is <b>${esc(r.status)}</b> · needed for ${esc(ex.join(', '))}</li>`).join('')}</ul></div></div>`
+     :`<div class="callout"><span>✅</span><div><b>Stocks</b><div class="hint">No reagent for this week's protocols is marked Low, Out or Make new.</div></div></div>`}
+  ${(noProto.length||noCtrl.length||noImg.length)?`<div class="callout"><span>📝</span><div><b>Still missing</b><ul class="plain">
+     ${noProto.map(e=>`<li>No protocol linked: <a href="#" data-open="experiments:${e.id}">${esc(e.title||'Untitled')}</a></li>`).join('')}
+     ${noCtrl.map(e=>`<li>No controls planned: <a href="#" data-open="experiments:${e.id}">${esc(e.title||'Untitled')}</a></li>`).join('')}
+     ${noImg.map(e=>`<li>No imaging plan: <a href="#" data-open="experiments:${e.id}">${esc(e.title||'Untitled')}</a></li>`).join('')}</ul></div></div>`:''}
+  <div class="callout"><span>🔬</span><div><b>Microscopes to book</b>${scopes.length?`<ul class="plain">${scopes.map(e=>`<li>${nice(e.date)}: ${esc(e.microscope)} for ${esc(e.title)}</li>`).join('')}</ul>`:'<div class="hint">No microscope set on this week\'s experiments.</div>'}
+    <div style="margin-top:6px"><a class="btn" href="${BOOKING_URL}" target="_blank" rel="noopener">Open booking calendar ↗</a></div></div></div>
+
+  <h2>🗒️ Notes for this week</h2>
+  <textarea class="block" id="wknotes" placeholder="Plans, ideas, things to order...">${esc(notes)}</textarea>
+  </div>`;
+}
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+
+/* ============ Database (table) pages ============ */
+function cell(f,r){
+  const v=r[f.k];
+  if(f.t==='select')return tag(v);
+  if(f.t==='date')return esc(nice(v));
+  if(f.t==='rel')return link(f.c,v);
+  if(f.t==='rels')return (v||[]).map(id=>link(f.c,id)).join('');
+  return esc(v);
+}
+function tablePage(c){
+  const s=SCHEMA[c], cols=s.fields.filter(f=>f.t!=='long').slice(0,6);
+  let rows=[...DB[c]];
+  if(c==='experiments')rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  return `<div class="page"><div class="pico">${s.icon}</div><h1>${s.label}</h1>
+   <div class="toolbar"><button class="btn pri" data-new="${c}">+ New ${s.one}</button><span class="hint">Click a row to open it.</span></div>
+   <div class="tblwrap"><table><thead><tr>${cols.map(f=>`<th>${esc(f.l)}</th>`).join('')}</tr></thead><tbody>
+   ${rows.map(r=>`<tr class="row" data-open="${c}:${r.id}">${cols.map((f,i)=>`<td class="${i?'':'ttl'}">${i?cell(f,r):'📄 '+esc(r.title||'Untitled')}</td>`).join('')}</tr>`).join('')||`<tr><td class="empty" colspan="${cols.length}">Empty. Click “+ New” to add one.</td></tr>`}
+   </tbody></table></div></div>`;
+}
+
+/* ============ Side peek editor ============ */
+function openPeek(c,id){
+  peekRef={c,id}; const r=byId(c,id), s=SCHEMA[c]; if(!r)return;
+  const props=s.fields.filter(f=>f.k!=='title'&&f.t!=='long').map(f=>{
+    let input;
+    if(f.t==='select')input=`<select data-f="${f.k}"><option value=""></option>${f.o.map(o=>`<option ${r[f.k]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    else if(f.t==='rel')input=`<select data-f="${f.k}"><option value="">—</option>${DB[f.c].map(o=>`<option value="${o.id}" ${r[f.k]===o.id?'selected':''}>${esc(o.title||'Untitled')}</option>`).join('')}</select>`;
+    else if(f.t==='rels'){const cur=r[f.k]||[];
+      input=`<div class="chips">${cur.map(id=>{const o=byId(f.c,id);return o?`<span class="chip">${esc(o.title||'Untitled')}<button data-unlink="${f.k}:${id}" title="Remove">×</button></span>`:''}).join('')}
+        <select data-link="${f.k}" style="width:auto"><option value="">+ add</option>${DB[f.c].filter(o=>!cur.includes(o.id)).map(o=>`<option value="${o.id}">${esc(o.title||'Untitled')}</option>`).join('')}</select></div>`}
+    else input=`<input data-f="${f.k}" type="${f.t==='date'?'date':f.t==='number'?'number':'text'}" value="${esc(r[f.k])}" placeholder="Empty">`;
+    return `<div class="prop"><label>${esc(f.l)}</label>${input}</div>`}).join('');
+  const longs=s.fields.filter(f=>f.t==='long').map(f=>`<div class="lbl">${esc(f.l)}</div><textarea class="block" data-f="${f.k}" style="${f.tall?'min-height:220px':''}" placeholder="${esc(f.ph||'')}">${esc(r[f.k])}</textarea>`).join('');
+  let extra='';
+  if(c==='experiments'){const p=byId('protocols',r.protocol);
+    if(p){const rs=(p.reagents||[]).map(id=>byId('reagents',id)).filter(Boolean);
+      extra=`<div class="callout"><span>📘</span><div><b>From protocol “${esc(p.title)}”</b>
+      ${rs.length?`<div>Reagents: ${rs.map(x=>`${esc(x.title)} ${tag(x.status)}`).join(' ')}</div>`:''}
+      ${p.controls?`<div class="hint" style="white-space:pre-wrap">Standard controls: ${esc(p.controls)}</div>`:''}</div></div>`}}
+  $('#peekin').innerHTML=`<div class="ptop"><span class="hint">${s.icon} ${esc(s.label)}</span>
+     <span>${c==='experiments'&&r.date?`<a class="ghost" target="_blank" rel="noopener" href="${gcalLink(r)}">+ Google Calendar</a>`:''}<button class="ghost" id="dup">Duplicate</button><button class="ghost" id="del">Delete</button><button class="ghost" id="close">✕ Close</button></span></div>
+    <input class="ptitle" data-f="title" value="${esc(r.title)}" placeholder="Untitled">
+    ${props}${extra}${longs}`;
+  $('#peek').classList.add('open');
+  $('#peekin').querySelectorAll('[data-f]').forEach(el=>{
+    const ev=el.tagName==='SELECT'?'change':'input';
+    el.addEventListener(ev,()=>{r[el.dataset.f]=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;save();refreshMain();
+      if(el.tagName==='SELECT')openPeek(c,id)});
+  });
+  $('#peekin').querySelectorAll('[data-link]').forEach(el=>el.onchange=()=>{if(!el.value)return;(r[el.dataset.link]||=[]).push(el.value);save();refreshMain();openPeek(c,id)});
+  $('#peekin').querySelectorAll('[data-unlink]').forEach(el=>el.onclick=()=>{const [k,v]=el.dataset.unlink.split(':');r[k]=(r[k]||[]).filter(x=>x!==v);save();refreshMain();openPeek(c,id)});
+  $('#close').onclick=closePeek;
+  $('#del').onclick=()=>{DB[c]=DB[c].filter(x=>x.id!==id);save();closePeek();render()};
+  $('#dup').onclick=()=>{const copy=JSON.parse(JSON.stringify(r));copy.id=uid();copy.title=(r.title||'Untitled')+' (copy)';if(c==='experiments'){copy.status='Planned';copy.deviations='';copy.results=''}DB[c].push(copy);save();render();openPeek(c,copy.id)};
+}
+function gcalLink(r){const d=r.date.replace(/-/g,''),n=iso(addDays(parse(r.date),1)).replace(/-/g,'');const p=byId('protocols',r.protocol);
+  const det=[p?'Protocol: '+p.title:'',r.microscope?'Microscope: '+r.microscope:'',r.imaging?'Imaging: '+r.imaging:'',r.controls?'Controls: '+r.controls:''].filter(Boolean).join('\n');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent('🧪 '+(r.title||'Experiment'))+'&dates='+d+'/'+n+'&details='+encodeURIComponent(det)}
+function closePeek(){$('#peek').classList.remove('open');peekRef=null}
+function refreshMain(){const y=$('#main').scrollTop;$('#main').innerHTML=view==='week'?weekPage():tablePage(view);bindMain();$('#main').scrollTop=y}
+function newRow(c,extra={}){const r={id:uid(),title:'',...extra};if(c==='experiments')r.status||='Planned';DB[c].push(r);save();refreshMain();openPeek(c,r.id);setTimeout(()=>$('.ptitle').focus(),50)}
+
+function bindMain(){
+  const m=$('#main');
+  m.querySelectorAll('[data-open]').forEach(el=>el.onclick=e=>{e.preventDefault();const [c,id]=el.dataset.open.split(':');openPeek(c,id)});
+  m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>newRow(el.dataset.new));
+  m.querySelectorAll('[data-newday]').forEach(el=>el.onclick=()=>newRow('experiments',{date:el.dataset.newday}));
+  m.querySelectorAll('[data-wk]').forEach(el=>el.onclick=()=>{const v=+el.dataset.wk;weekOffset=v?weekOffset+v:0;render()});
+  const n=$('#wknotes'); if(n)n.oninput=()=>{const wk=iso(addDays(mondayOf(new Date()),weekOffset*7));(DB.weeks[wk]||={}).notes=n.value;save()};
+}
+
+/* ============ Backup ============ */
+function exportData(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wellplanned-backup-'+iso(new Date())+'.json';a.click();
+}
+$('#importfile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!d.experiments)throw 0;DB=d;for(const k of Object.keys(SCHEMA))DB[k]||=[];DB.weeks||={};save();closePeek();render()}catch(err){$('#main').insertAdjacentHTML('afterbegin','<div class="page"><div class="callout warn">That file is not a WellPlanned backup.</div></div>')}})};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePeek()});
+
+render();
+</script>
+</body>
+</html>
