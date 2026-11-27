@@ -64,7 +64,14 @@ h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bo
 .card:hover{background:var(--hover)}
 .card .t{font-weight:500;margin-bottom:3px}
 .card .m{color:var(--muted);font-size:12px}
-.addday{margin-top:auto;text-align:left}
+.addday{text-align:left}
+.todos{margin-top:auto;border-top:1px solid var(--line);padding-top:6px;display:flex;flex-direction:column;gap:3px}
+.todo{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;line-height:1.35}
+.todo input{margin:2px 0 0;flex:none;accent-color:var(--accent)}
+.todo a{text-decoration:none;overflow-wrap:anywhere}
+.todo.done a{text-decoration:line-through;color:var(--muted)}
+.todoadd{border:0;background:none;font-size:12.5px;padding:3px 0;width:100%;color:var(--muted);outline:none}
+.todoadd:focus{color:var(--text)}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 .tblwrap{overflow-x:auto}
 .tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin:8px 0}
@@ -265,7 +272,9 @@ function weekPage(){
       return `<div class="card" data-open="experiments:${e.id}"><div class="t">${esc(e.title||'Untitled')}</div>
         ${tag(e.status)}<div class="m">${p?'📘 '+esc(p.title):''}${e.microscope?'<br>🔬 '+esc(e.microscope):''}</div></div>`}).join('');
     return `<div class="day ${ds===today?'today':''}"><div class="dayh"><b>${d.toLocaleDateString(undefined,{weekday:'short'})}</b>${d.getDate()}.${d.getMonth()+1}.</div>
-      ${cards}<button class="ghost addday" data-newday="${ds}">+ New</button></div>`}).join('');
+      ${cards}<button class="ghost addday" data-newday="${ds}">+ Experiment</button>
+      <div class="todos">${DB.todos.filter(t=>t.due===ds).sort((a,b)=>(a.status==='Done')-(b.status==='Done')).map(t=>`<div class="todo ${t.status==='Done'?'done':''}"><input type="checkbox" data-todo="${t.id}" ${t.status==='Done'?'checked':''} aria-label="Done"><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a></div>`).join('')}
+      <input class="todoadd" data-tododay="${ds}" placeholder="+ To-do"></div></div>`}).join('');
 
   // housekeeping checks
   const culture=DB.cells.filter(c=>c.status==='Growing'||c.status==='Ready');
@@ -301,9 +310,10 @@ function weekPage(){
 /* open to-dos (from emails, Slack or typed in), most urgent first */
 function todoBox(){
   const pr={High:0,Medium:1,'Low prio':2};
-  const open=DB.todos.filter(t=>t.status!=='Done').sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3)||(a.due||'9').localeCompare(b.due||'9'));
-  if(!open.length)return `<div class="callout"><span>✅</span><div><b>To-dos</b><div class="hint">Nothing open. Import the daily to-do file with “Import backup”.</div></div></div>`;
-  return `<div class="callout"><span>✅</span><div style="flex:1;min-width:0"><b>Open to-dos (${open.length})</b><ul class="plain">${open.map(t=>`<li><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a> ${tag(t.priority)}${t.due?' · due '+nice(t.due):''}${t.from?' · '+esc(t.from):''}${/^https:\/\//.test(t.link||'')?` · <a href="${esc(t.link)}" target="_blank" rel="noopener">open ↗</a>`:''}</li>`).join('')}</ul></div></div>`;
+  const mon=iso(addDays(mondayOf(new Date()),weekOffset*7)), sun=iso(addDays(mondayOf(new Date()),weekOffset*7+6));
+  const open=DB.todos.filter(t=>t.status!=='Done'&&!(t.due&&t.due>=mon&&t.due<=sun)).sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3)||(a.due||'9').localeCompare(b.due||'9'));
+  if(!open.length)return `<div class="callout"><span>✅</span><div><b>To-dos</b><div class="hint">Nothing open outside this week's days. Add to-dos in a day above, or import the daily to-do file with “Import backup”.</div></div></div>`;
+  return `<div class="callout"><span>✅</span><div style="flex:1;min-width:0"><b>Other open to-dos (${open.length})</b> <span class="hint">· not planned for a day this week</span><ul class="plain">${open.map(t=>`<li><a href="#" data-open="todos:${t.id}">${esc(t.title||'Untitled')}</a> ${tag(t.priority)}${t.due?' · due '+nice(t.due):''}${t.from?' · '+esc(t.from):''}${/^https:\/\//.test(t.link||'')?` · <a href="${esc(t.link)}" target="_blank" rel="noopener">open ↗</a>`:''}</li>`).join('')}</ul></div></div>`;
 }
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
 
@@ -390,6 +400,9 @@ function bindMain(){
   m.querySelectorAll('[data-open]').forEach(el=>el.onclick=e=>{e.preventDefault();const [c,id]=el.dataset.open.split(':');openPeek(c,id)});
   m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>{const c=el.dataset.new, s=SCHEMA[c];newRow(c,s.tabsBy&&tabSel[c]?{[s.tabsBy]:tabSel[c]}:{})});
   m.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{const i=el.dataset.tab.indexOf(':');tabSel[el.dataset.tab.slice(0,i)]=el.dataset.tab.slice(i+1);refreshMain()});
+  m.querySelectorAll('[data-todo]').forEach(el=>el.onchange=()=>{const t=byId('todos',el.dataset.todo);if(!t)return;t.status=el.checked?'Done':'Open';save();refreshMain()});
+  m.querySelectorAll('[data-tododay]').forEach(el=>el.onkeydown=e=>{if(e.key!=='Enter'||!el.value.trim())return;const day=el.dataset.tododay;
+    DB.todos.push({id:uid(),title:el.value.trim(),status:'Open',source:'Manual',due:day});save();refreshMain();const n=$(`[data-tododay="${day}"]`);if(n)n.focus()});
   m.querySelectorAll('[data-newday]').forEach(el=>el.onclick=()=>newRow('experiments',{date:el.dataset.newday}));
   m.querySelectorAll('[data-wk]').forEach(el=>el.onclick=()=>{const v=+el.dataset.wk;weekOffset=v?weekOffset+v:0;render()});
   const n=$('#wknotes'); if(n)n.oninput=()=>{const wk=iso(addDays(mondayOf(new Date()),weekOffset*7));(DB.weeks[wk]||={}).notes=n.value;save()};
@@ -406,7 +419,7 @@ function mergeImport(d){
   for(const c of Object.keys(SCHEMA)){(d[c]||[]).forEach(r=>{const ex=DB[c].find(x=>(x.title||'').trim().toLowerCase()===(r.title||'').trim().toLowerCase());
     if(ex){map[r.id]=ex.id;upd.push([ex,r]);updated++}else{map[r.id]=r.id;DB[c].push(r);added++}})}
   /* existing entries with the same name: fields in the pack are updated, your other fields (stock, location, ...) stay */
-  upd.forEach(([ex,r])=>{for(const [k,v] of Object.entries(r))if(k!=='id')ex[k]=v});
+  upd.forEach(([ex,r])=>{if(DB.todos.includes(ex))return;for(const [k,v] of Object.entries(r))if(k!=='id')ex[k]=v});
   for(const c of Object.keys(SCHEMA))for(const f of SCHEMA[c].fields){if(f.t!=='rel'&&f.t!=='rels')continue;
     DB[c].forEach(r=>{if(f.t==='rel'&&map[r[f.k]])r[f.k]=map[r[f.k]];if(f.t==='rels'&&Array.isArray(r[f.k]))r[f.k]=[...new Set(r[f.k].map(x=>map[x]||x))]})}
   save();closePeek();render();
