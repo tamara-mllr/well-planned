@@ -66,6 +66,10 @@ h2{font-size:20px;font-weight:600;margin:32px 0 8px;padding-bottom:4px;border-bo
 .addday{margin-top:auto;text-align:left}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 .tblwrap{overflow-x:auto}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin:8px 0}
+.tab{border:0;background:none;padding:6px 10px;cursor:pointer;color:var(--muted);white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--text);border-bottom-color:var(--text);font-weight:500}
 th{font-weight:400;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 tr.row{cursor:pointer}
@@ -134,12 +138,26 @@ const SCHEMA = {
     {k:'controls',t:'long',l:'Controls',ph:'e.g. untreated, secondary-only, single stains for bleed-through...'},
     {k:'deviations',t:'long',l:'Deviations from protocol',ph:'What did you do differently? Why?'},
     {k:'results',t:'long',l:'Results and notes',ph:'Where are the images saved? Segmentation / quantification notes...'}]},
-  cells:{label:'Cells in culture',icon:'🧫',one:'cell culture',fields:[
+  cells:{label:'Cell lines',icon:'🧫',one:'cell line',cols:['title','status','markers','passage','split','ratio','vessel'],fields:[
     {k:'title',t:'text',l:'Cell line'},
     {k:'status',t:'select',l:'Status',o:['Growing','Ready','Frozen','Discarded']},
+    {k:'markers',t:'text',l:'Fluorescent markers',ph:'e.g. H2B-mCherry, LifeAct-GFP'},
     {k:'passage',t:'number',l:'Passage'},
-    {k:'vessel',t:'text',l:'Vessel'},
     {k:'split',t:'date',l:'Last split'},
+    {k:'ratio',t:'text',l:'Split ratio',ph:'e.g. 1:10'},
+    {k:'vessel',t:'text',l:'Vessel'},
+    {k:'medium',t:'text',l:'Medium'},
+    {k:'selection',t:'text',l:'Selection',ph:'e.g. Puromycin 1 µg/ml'},
+    {k:'notes',t:'long',l:'Notes'}]},
+  splits:{label:'Split log',icon:'📈',one:'split',cols:['title','cell','date','ratio','passage','confluence','count'],fields:[
+    {k:'title',t:'text',l:'Name'},
+    {k:'cell',t:'rel',l:'Cell line',c:'cells'},
+    {k:'date',t:'date',l:'Date'},
+    {k:'ratio',t:'text',l:'Split ratio',ph:'e.g. 1:10'},
+    {k:'passage',t:'number',l:'New passage'},
+    {k:'confluence',t:'number',l:'Confluence before (%)'},
+    {k:'count',t:'text',l:'Cell count',ph:'e.g. 2.1e6 cells/ml'},
+    {k:'vessel',t:'text',l:'Into vessel'},
     {k:'notes',t:'long',l:'Notes'}]},
   protocols:{label:'Protocols',icon:'📘',one:'protocol',fields:[
     {k:'title',t:'text',l:'Name'},
@@ -148,10 +166,18 @@ const SCHEMA = {
     {k:'reagents',t:'rels',l:'Reagents needed',c:'reagents'},
     {k:'controls',t:'long',l:'Standard controls'},
     {k:'steps',t:'long',l:'Steps',ph:'1. ...\n2. ...',tall:true}]},
-  reagents:{label:'Reagents & stocks',icon:'🧴',one:'reagent',fields:[
+  reagents:{label:'Reagents & stocks',icon:'🧴',one:'reagent',tabsBy:'type',cols:['title','type','status','conc','dilution','location','expires'],fields:[
     {k:'title',t:'text',l:'Reagent'},
+    {k:'type',t:'select',l:'Type',o:['Primary antibody','Secondary antibody','Dye / stain','Chemical / buffer','Medium / supplement','Drug / treatment','Plasmid / virus','Kit','Consumable']},
     {k:'status',t:'select',l:'Stock',o:['OK','Low','Out','Make new']},
     {k:'conc',t:'text',l:'Stock concentration'},
+    {k:'dilution',t:'text',l:'Working dilution',ph:'e.g. 1:500'},
+    {k:'target',t:'text',l:'Target',ph:'antibodies'},
+    {k:'host',t:'text',l:'Host species',ph:'antibodies'},
+    {k:'fluor',t:'text',l:'Fluorophore',ph:'e.g. Alexa 488'},
+    {k:'supplier',t:'text',l:'Supplier'},
+    {k:'catno',t:'text',l:'Catalogue no.'},
+    {k:'lot',t:'text',l:'Lot'},
     {k:'location',t:'text',l:'Location'},
     {k:'expires',t:'date',l:'Expires'},
     {k:'notes',t:'long',l:'Notes / recipe'}]}
@@ -161,12 +187,12 @@ const SCHEMA = {
 function uid(){return Math.random().toString(36).slice(2,10)}
 function example(){
   const m = mondayOf(new Date()), d = n => iso(addDays(m,n));
-  const r1={id:uid(),title:'PFA 4%',status:'OK',conc:'4% in PBS',location:'Fridge 2',expires:d(30)};
-  const r2={id:uid(),title:'DAPI',status:'Low',conc:'1 mg/ml',location:'-20 °C box A'};
-  const r3={id:uid(),title:'Triton X-100',status:'OK',conc:'10%',location:'Shelf'};
+  const r1={id:uid(),title:'PFA 4%',type:'Chemical / buffer',status:'OK',conc:'4% in PBS',location:'Fridge 2',expires:d(30)};
+  const r2={id:uid(),title:'DAPI',type:'Dye / stain',status:'Low',dilution:'1:1000',conc:'1 mg/ml',location:'-20 °C box A'};
+  const r3={id:uid(),title:'Triton X-100',type:'Chemical / buffer',status:'OK',conc:'10%',location:'Shelf'};
   const p1={id:uid(),title:'IF staining (example)',category:'Staining',duration:'2 days',reagents:[r1.id,r2.id,r3.id],
     controls:'Secondary antibody only\nUnstained cells',steps:'1. Fix 15 min with 4% PFA\n2. Permeabilise 0.1% Triton 10 min\n3. Block ...\n4. Primary antibody overnight 4 °C\n5. Secondary + DAPI 1 h'};
-  const c1={id:uid(),title:'HeLa (example)',status:'Growing',passage:12,vessel:'T75',split:d(-3)};
+  const c1={id:uid(),title:'HeLa (example)',status:'Growing',markers:'H2B-mCherry (example)',passage:12,vessel:'T75',split:d(-3),ratio:'1:8'};
   return {
     experiments:[{id:uid(),title:'IF of marker X (example)',date:d(1),status:'Planned',protocol:p1.id,cells:[c1.id],microscope:'Confocal (guess)',
       imaging:'63x oil, DAPI + 488, z-stack 0.3 µm',controls:'Secondary only'}],
@@ -194,7 +220,7 @@ function tag(v){if(!v)return '';return `<span class="tag" style="background:var(
 function link(c,id){const r=byId(c,id);return r?`<span class="tag" style="background:var(--gray)">${SCHEMA[c].icon} ${esc(r.title||'Untitled')}</span>`:''}
 
 /* ============ Navigation ============ */
-let view='week', weekOffset=0, peekRef=null;
+let view='week', weekOffset=0, peekRef=null, tabSel={};
 function sidebar(){
   const item=(v,ic,l)=>`<button class="nav ${view===v?'on':''}" data-v="${v}"><span class="ic">${ic}</span>${l}</button>`;
   $('#sb').innerHTML=`<div class="ws"><span class="logo">W</span>WellPlanned</div>
@@ -243,7 +269,7 @@ function weekPage(){
   <div class="week">${days}</div>
 
   <h2>🧹 Housekeeping</h2>
-  <div class="callout"><span>🧫</span><div><b>Cells in culture</b>${culture.length?`<ul class="plain">${culture.map(c=>`<li><a href="#" data-open="cells:${c.id}">${esc(c.title)}</a> ${tag(c.status)} <span class="hint">${c.passage?'P'+esc(c.passage):''} ${esc(c.vessel||'')} ${c.split?'· split '+nice(c.split):''}</span></li>`).join('')}</ul>`:'<div class="hint">Nothing in culture. Add cells under “Cells in culture”.</div>'}</div></div>
+  <div class="callout"><span>🧫</span><div><b>Cells in culture</b>${culture.length?`<ul class="plain">${culture.map(c=>`<li><a href="#" data-open="cells:${c.id}">${esc(c.title)}</a> ${tag(c.status)} <span class="hint">${c.markers?esc(c.markers)+' · ':''}${c.passage?'P'+esc(c.passage):''} ${esc(c.vessel||'')} ${c.split?'· split '+nice(c.split)+(c.ratio?' at '+esc(c.ratio):'')+' ('+Math.round((new Date(iso(new Date()))-parse(c.split))/864e5)+' d ago)':''}</span></li>`).join('')}</ul>`:'<div class="hint">Nothing in culture. Add them under “Cell lines”.</div>'}</div></div>
   ${short.size?`<div class="callout warn"><span>⚠️</span><div><b>Check these stocks before this week</b><ul class="plain">${[...short.values()].map(({r,ex})=>`<li><a href="#" data-open="reagents:${r.id}">${esc(r.title)}</a> is <b>${esc(r.status)}</b> · needed for ${esc(ex.join(', '))}</li>`).join('')}</ul></div></div>`
      :`<div class="callout"><span>✅</span><div><b>Stocks</b><div class="hint">No reagent for this week's protocols is marked Low, Out or Make new.</div></div></div>`}
   ${(noProto.length||noCtrl.length||noImg.length)?`<div class="callout"><span>📝</span><div><b>Still missing</b><ul class="plain">
@@ -269,11 +295,16 @@ function cell(f,r){
   return esc(v);
 }
 function tablePage(c){
-  const s=SCHEMA[c], cols=s.fields.filter(f=>f.t!=='long').slice(0,6);
-  let rows=[...DB[c]];
-  if(c==='experiments')rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const s=SCHEMA[c], cols=s.cols?s.cols.map(k=>s.fields.find(f=>f.k===k)):s.fields.filter(f=>f.t!=='long').slice(0,6);
+  let rows=[...DB[c]], tabs='';
+  if(c==='experiments'||c==='splits')rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  else rows.sort((a,b)=>(a.title||'').localeCompare(b.title||''));
+  if(s.tabsBy){const f=s.fields.find(f=>f.k===s.tabsBy), cur=tabSel[c]||'';
+    const count=o=>DB[c].filter(r=>(r[s.tabsBy]||'')===o).length;
+    tabs=`<div class="tabs"><button class="tab ${cur?'':'on'}" data-tab="${c}:">All <span class="hint">${DB[c].length}</span></button>${f.o.map(o=>`<button class="tab ${cur===o?'on':''}" data-tab="${c}:${esc(o)}">${esc(o)} <span class="hint">${count(o)||''}</span></button>`).join('')}</div>`;
+    if(cur)rows=rows.filter(r=>r[s.tabsBy]===cur);}
   return `<div class="page"><div class="pico">${s.icon}</div><h1>${s.label}</h1>
-   <div class="toolbar"><button class="btn pri" data-new="${c}">+ New ${s.one}</button><span class="hint">Click a row to open it.</span></div>
+   ${tabs}<div class="toolbar"><button class="btn pri" data-new="${c}">+ New ${s.one}</button><span class="hint">Click a row to open it.</span></div>
    <div class="tblwrap"><table><thead><tr>${cols.map(f=>`<th>${esc(f.l)}</th>`).join('')}</tr></thead><tbody>
    ${rows.map(r=>`<tr class="row" data-open="${c}:${r.id}">${cols.map((f,i)=>`<td class="${i?'':'ttl'}">${i?cell(f,r):'📄 '+esc(r.title||'Untitled')}</td>`).join('')}</tr>`).join('')||`<tr><td class="empty" colspan="${cols.length}">Empty. Click “+ New” to add one.</td></tr>`}
    </tbody></table></div></div>`;
@@ -289,7 +320,7 @@ function openPeek(c,id){
     else if(f.t==='rels'){const cur=r[f.k]||[];
       input=`<div class="chips">${cur.map(id=>{const o=byId(f.c,id);return o?`<span class="chip">${esc(o.title||'Untitled')}<button data-unlink="${f.k}:${id}" title="Remove">×</button></span>`:''}).join('')}
         <select data-link="${f.k}" style="width:auto"><option value="">+ add</option>${DB[f.c].filter(o=>!cur.includes(o.id)).map(o=>`<option value="${o.id}">${esc(o.title||'Untitled')}</option>`).join('')}</select></div>`}
-    else input=`<input data-f="${f.k}" type="${f.t==='date'?'date':f.t==='number'?'number':'text'}" value="${esc(r[f.k])}" placeholder="Empty">`;
+    else input=`<input data-f="${f.k}" type="${f.t==='date'?'date':f.t==='number'?'number':'text'}" value="${esc(r[f.k])}" placeholder="${esc(f.ph||'Empty')}">`;
     return `<div class="prop"><label>${esc(f.l)}</label>${input}</div>`}).join('');
   const longs=s.fields.filter(f=>f.t==='long').map(f=>`<div class="lbl">${esc(f.l)}</div><textarea class="block" data-f="${f.k}" style="${f.tall?'min-height:220px':''}" placeholder="${esc(f.ph||'')}">${esc(r[f.k])}</textarea>`).join('');
   let extra='';
@@ -298,6 +329,11 @@ function openPeek(c,id){
       extra=`<div class="callout"><span>📘</span><div><b>From protocol “${esc(p.title)}”</b>
       ${rs.length?`<div>Reagents: ${rs.map(x=>`${esc(x.title)} ${tag(x.status)}`).join(' ')}</div>`:''}
       ${p.controls?`<div class="hint" style="white-space:pre-wrap">Standard controls: ${esc(p.controls)}</div>`:''}</div></div>`}}
+  if(c==='cells'){const hist=DB.splits.filter(x=>x.cell===id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const since=r.split?Math.round((new Date(iso(new Date()))-parse(r.split))/864e5):null;
+    extra=`<div class="callout"><span>📈</span><div style="flex:1"><b>Splitting</b> ${since!==null?`<span class="hint">· ${since} day${since===1?'':'s'} since last split</span>`:''}
+      <div style="margin:6px 0"><button class="btn" id="logsplit">+ Log a split today</button></div>
+      ${hist.length?`<ul class="plain">${hist.slice(0,6).map(x=>`<li><a href="#" data-peek="splits:${x.id}">${nice(x.date)}</a> · ${esc(x.ratio||'?')}${x.passage!==''&&x.passage!=null?' · P'+esc(x.passage):''}${x.confluence?' · '+esc(x.confluence)+'% confluent':''}</li>`).join('')}</ul>`:'<div class="hint">No splits logged yet. Logging each split (date, ratio, confluence) builds the data for predicting growth later.</div>'}</div></div>`}
   $('#peekin').innerHTML=`<div class="ptop"><span class="hint">${s.icon} ${esc(s.label)}</span>
      <span>${c==='experiments'&&r.date?`<a class="ghost" target="_blank" rel="noopener" href="${gcalLink(r)}">+ Google Calendar</a>`:''}<button class="ghost" id="dup">Duplicate</button><button class="ghost" id="del">Delete</button><button class="ghost" id="close">✕ Close</button></span></div>
     <input class="ptitle" data-f="title" value="${esc(r.title)}" placeholder="Untitled">
@@ -305,18 +341,24 @@ function openPeek(c,id){
   $('#peek').classList.add('open');
   $('#peekin').querySelectorAll('[data-f]').forEach(el=>{
     const ev=el.tagName==='SELECT'?'change':'input';
-    el.addEventListener(ev,()=>{r[el.dataset.f]=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;save();refreshMain();
+    el.addEventListener(ev,()=>{r[el.dataset.f]=el.type==='number'?(el.value===''?'':Number(el.value)):el.value;if(c==='splits'&&r.cell)syncCell(r.cell);save();refreshMain();
       if(el.tagName==='SELECT')openPeek(c,id)});
   });
   $('#peekin').querySelectorAll('[data-link]').forEach(el=>el.onchange=()=>{if(!el.value)return;(r[el.dataset.link]||=[]).push(el.value);save();refreshMain();openPeek(c,id)});
   $('#peekin').querySelectorAll('[data-unlink]').forEach(el=>el.onclick=()=>{const [k,v]=el.dataset.unlink.split(':');r[k]=(r[k]||[]).filter(x=>x!==v);save();refreshMain();openPeek(c,id)});
   $('#close').onclick=closePeek;
-  $('#del').onclick=()=>{DB[c]=DB[c].filter(x=>x.id!==id);save();closePeek();render()};
+  $('#peekin').querySelectorAll('[data-peek]').forEach(el=>el.onclick=e=>{e.preventDefault();const [cc,ii]=el.dataset.peek.split(':');openPeek(cc,ii)});
+  if($('#logsplit'))$('#logsplit').onclick=()=>{const sp={id:uid(),title:(r.title||'Cells')+' split '+nice(iso(new Date())),cell:id,date:iso(new Date()),ratio:r.ratio||'',passage:r.passage!==''&&r.passage!=null?Number(r.passage)+1:'',vessel:r.vessel||''};
+    DB.splits.push(sp);syncCell(id);save();refreshMain();openPeek('splits',sp.id)};
+  $('#del').onclick=()=>{DB[c]=DB[c].filter(x=>x.id!==id);if(c==='splits'&&r.cell)syncCell(r.cell);save();closePeek();render()};
   $('#dup').onclick=()=>{const copy=JSON.parse(JSON.stringify(r));copy.id=uid();copy.title=(r.title||'Untitled')+' (copy)';if(c==='experiments'){copy.status='Planned';copy.deviations='';copy.results=''}DB[c].push(copy);save();render();openPeek(c,copy.id)};
 }
 function gcalLink(r){const d=r.date.replace(/-/g,''),n=iso(addDays(parse(r.date),1)).replace(/-/g,'');const p=byId('protocols',r.protocol);
   const det=[p?'Protocol: '+p.title:'',r.microscope?'Microscope: '+r.microscope:'',r.imaging?'Imaging: '+r.imaging:'',r.controls?'Controls: '+r.controls:''].filter(Boolean).join('\n');
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent('🧪 '+(r.title||'Experiment'))+'&dates='+d+'/'+n+'&details='+encodeURIComponent(det)}
+/* the newest split in the log updates the cell line's "last split", ratio and passage */
+function syncCell(cid){const cl=byId('cells',cid);if(!cl)return;const last=DB.splits.filter(x=>x.cell===cid&&x.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  if(!last)return;cl.split=last.date;if(last.ratio)cl.ratio=last.ratio;if(last.passage!==''&&last.passage!=null)cl.passage=last.passage;if(last.vessel)cl.vessel=last.vessel}
 function closePeek(){$('#peek').classList.remove('open');peekRef=null}
 function refreshMain(){const y=$('#main').scrollTop;$('#main').innerHTML=view==='week'?weekPage():tablePage(view);bindMain();$('#main').scrollTop=y}
 function newRow(c,extra={}){const r={id:uid(),title:'',...extra};if(c==='experiments')r.status||='Planned';DB[c].push(r);save();refreshMain();openPeek(c,r.id);setTimeout(()=>$('.ptitle').focus(),50)}
@@ -324,7 +366,8 @@ function newRow(c,extra={}){const r={id:uid(),title:'',...extra};if(c==='experim
 function bindMain(){
   const m=$('#main');
   m.querySelectorAll('[data-open]').forEach(el=>el.onclick=e=>{e.preventDefault();const [c,id]=el.dataset.open.split(':');openPeek(c,id)});
-  m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>newRow(el.dataset.new));
+  m.querySelectorAll('[data-new]').forEach(el=>el.onclick=()=>{const c=el.dataset.new, s=SCHEMA[c];newRow(c,s.tabsBy&&tabSel[c]?{[s.tabsBy]:tabSel[c]}:{})});
+  m.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{const i=el.dataset.tab.indexOf(':');tabSel[el.dataset.tab.slice(0,i)]=el.dataset.tab.slice(i+1);refreshMain()});
   m.querySelectorAll('[data-newday]').forEach(el=>el.onclick=()=>newRow('experiments',{date:el.dataset.newday}));
   m.querySelectorAll('[data-wk]').forEach(el=>el.onclick=()=>{const v=+el.dataset.wk;weekOffset=v?weekOffset+v:0;render()});
   const n=$('#wknotes'); if(n)n.oninput=()=>{const wk=iso(addDays(mondayOf(new Date()),weekOffset*7));(DB.weeks[wk]||={}).notes=n.value;save()};
